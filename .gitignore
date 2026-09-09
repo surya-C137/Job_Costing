@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+.playwright/
+
+# Secrets — .env.example stays tracked (see deploy/, Task 5.1)
+.env
+.env.*
+!.env.example
+
+# Runtime data: SQLite file and attachments (REQUIREMENTS §7).
+# Never commit; backed up nightly to BACKUP_PATH instead.
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+npm-debug.log*
+
+# Excel lock files — created when the reference workbook is open.
+# The workbook itself IS tracked; it is the parity source of truth.
+~$*.xls
+~$*.xlsx
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
