@@ -1,0 +1,13 @@
+{
+  "//": "Type checking and editors. Covers tests as well as src. Emits nothing - tsconfig.build.json does that.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    /* No "dom" and no "@types/node": the type system itself refuses calc a
+       browser or a filesystem. */
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@shopquote/calc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure costing engine. Config in, result out. Zero runtime dependencies.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "//": "Do not add a `dependencies` block. CLAUDE.md: calc has zero runtime dependencies, no I/O, no DB, no Date.now(). This is what makes the second shop a config change rather than a rewrite."
+}

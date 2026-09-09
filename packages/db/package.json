@@ -1,0 +1,32 @@
+{
+  "name": "@shopquote/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drizzle schema, migrations, seed data, and ShopConfig assembly",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate": "node --experimental-strip-types src/migrate.ts",
+    "db:seed": "node --experimental-strip-types src/seed.ts"
+  },
+  "dependencies": {
+    "@shopquote/calc": "*",
+    "better-sqlite3": "^11.7.0",
+    "drizzle-orm": "^0.45.2",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "drizzle-kit": "^0.31.10"
+  }
+}

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Internal quoting system for a sheet metal job shop. Replaces a 1998-era Excel estimator. Read `REQUIREMENTS.md` before working; `BUILD-PLAN.md` is the ordered task list.
 
 ## Current state — read this first
-**Done through BUILD-PLAN Task 0.2.** No TypeScript exists yet: there is no `package.json` and no workspaces, so the commands and layout below describe the target, not what's on disk. What is on disk:
+**Done through BUILD-PLAN Task 1.1.** The monorepo is scaffolded and `npm install && npm run typecheck && npm test && npm run lint && npm run build` are all green, but every workspace is a stub: calc exports only a schema version, the API serves only `/healthz`, and the web app is a placeholder. The engine starts at Task 1.2.
 
 ```
 CLAUDE.md · docs/REQUIREMENTS.md · docs/BUILD-PLAN.md   the spec set
@@ -30,7 +30,9 @@ Ask for these rather than reinventing them; the design system and the intake heu
 
 **The workbook is the source of truth.** Task 0.2 extracts the seed JSON *and* the golden fixture from its cached values — explicitly not typed by hand. Don't substitute the excerpt in REQUIREMENTS §6 (a partial table, ~12 of ~80 materials) or hand-enter the §9 numbers as a fixture; a fixture typed from the spec proves only that you can copy, not that the engine matches the workbook.
 
-**Where to start.** Task 1.1 (scaffold the monorepo). Note that `packages/db/seed/` and `packages/calc/test/fixtures/` already hold files — scaffold around them, don't overwrite them. Tasks are ordered and each assumes the previous is green. The golden test must pass before any UI work (§9).
+**Where to start.** Task 1.2 (calc types and the material module). Tasks are ordered and each assumes the previous is green. The golden test must pass before any UI work (§9).
+
+**Two scaffold details worth knowing before you edit.** Each package has *two* tsconfigs: `tsconfig.json` is `noEmit`, covers `src` and `test`, and maps `@shopquote/*` to source so a clean checkout typechecks without building; `tsconfig.build.json` clears that map, pins `rootDir: src`, and emits through project references. Add new source to both by leaving the `include` globs alone. And calc's purity is enforced, not just documented — ESLint bans `node:*`/`fs`/`path`/`crypto` imports, the `Date` and `process` globals, and `console` under `packages/calc/src/**`, while its tsconfig sets `types: []` and omits `dom`. If you need a clock or a file in calc, the answer is to pass the value in through `ShopConfig`, not to relax the rule.
 
 ## What matters most
 1. **Parity first.** The costing engine must reproduce the shop's workbook (`docs/reference/Quote_Metal_Cost.xls`) to the cent. The golden test in `packages/calc/test/golden.test.ts` is the definition of correct. Never edit the fixture to make a test pass — trace the formula in the xls, fix the engine, explain the discrepancy in the commit message.

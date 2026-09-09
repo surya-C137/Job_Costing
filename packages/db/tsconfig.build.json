@@ -1,0 +1,15 @@
+{
+  "//": "Emit. Depends on calc, so `tsc --build` compiles that first.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "paths": {}
+  },
+  "references": [{ "path": "../calc/tsconfig.build.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules", "seed", "test"]
+}

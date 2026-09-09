@@ -1,0 +1,20 @@
+{
+  "name": "@shopquote/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fastify server. Calc runs here, so its results are authoritative.",
+  "scripts": {
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shopquote/calc": "*",
+    "@shopquote/db": "*",
+    "fastify": "^5.2.0",
+    "zod": "^3.24.1"
+  }
+}

@@ -4,6 +4,63 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-09 — Task 1.1, monorepo scaffold
+
+**Node `engines: ">=22"`, developed on Node 24.13.**
+REQUIREMENTS §2 says Node 22 LTS; 24 is what is installed, and as of this date
+24 is current LTS with 22 in maintenance. The range admits both rather than
+silently swapping the stack. *Revisit at* Task 5.1, where the Docker base image
+tag has to be pinned to one of them.
+
+**Vitest 3 and Vite 7, aligned to a single copy.**
+Vitest 2 pins Vite 5, which collided with the Vite 6 that `apps/web` wanted:
+two copies of Vite meant two incompatible `Plugin` types under
+`exactOptionalPropertyTypes`, and `tsc` rejected `vite.config.ts`. Vitest 3
+also renamed workspace configuration to `test.projects` — the API this repo
+uses — so v2 would have ignored it silently. Everything now resolves to one
+Vite 7. *Watch for* the same failure shape whenever a workspace pins a Vite
+major of its own.
+
+**Split `tsconfig.json` (check) from `tsconfig.build.json` (emit).**
+Typechecking wants to reach across packages into source so a clean checkout
+needs no build first; emitting wants each package confined to its own `rootDir`.
+One config cannot do both — mapping `@shopquote/*` to source made `tsc` fail
+with TS6059 the moment `rootDir` was set. So `tsconfig.json` is `noEmit`, covers
+`src` and `test`, and uses the `paths` map; `tsconfig.build.json` clears `paths`,
+sets `rootDir: src`, and consumes dependencies through project references.
+*Alternatives:* build calc before every typecheck (slow, and order-dependent);
+project references alone (would leave a clean checkout unable to typecheck).
+
+**ESLint enforces calc's purity rather than trusting review.**
+"Calc is pure" is CLAUDE.md's second principle and the thing most likely to erode
+quietly. `packages/calc/src/**` bans `node:*`/`fs`/`path`/`crypto`/`http`
+imports, the `Date` and `process` globals, and all `console`. Its `tsconfig.json`
+also sets `types: []` and omits `dom`, so the type system withholds a filesystem
+and a browser. Verified by linting a deliberately impure probe file: all three
+rules fire. *Alternative:* a note in CLAUDE.md (rejected — CLAUDE.md already says
+it, and saying it twice is not enforcement).
+
+**Prettier settings chosen here, not inherited.**
+BUILD-PLAN Task 1.1 says "ESLint + Prettier with the settings in CLAUDE.md", but
+CLAUDE.md specifies no formatting rules. Picked: 100 columns, single quotes,
+semicolons, trailing commas, LF. Generated files (`packages/db/seed/`,
+`packages/calc/test/fixtures/`) are in `.prettierignore` so reformatting cannot
+create diff noise in files that should only change when the workbook does.
+
+**`concurrently` for `npm run dev`.**
+Backgrounding with `&` does not work in cmd.exe, and shops run Windows Server
+(§2). Boring, widely used, dev-only.
+
+**drizzle-orm 0.45.2 / drizzle-kit 0.31.10, ahead of Task 2.1 needing them.**
+The 0.38 line carries a high-severity SQL-injection advisory
+(GHSA-gpj5-g38j-94v9, improperly escaped SQL identifiers). npm calls the upgrade
+breaking, but no schema exists yet, so the cost is zero now and non-zero later.
+Production dependencies audit clean; seven moderate advisories remain in dev
+tooling only (`@vitest/mocker`, and `esbuild` reached through drizzle-kit's
+deprecated `@esbuild-kit/*` chain) and are not shipped.
+
+---
+
 ## 2026-09-09 — Task 0.2, workbook extraction
 
 **Extract cached values with `xlrd`, not formulas.**

@@ -1,0 +1,69 @@
+/*
+ * Design tokens.
+ *
+ * PROVISIONAL. The real source is `docs/reference/sheet-metal-material-calculator.html`,
+ * which is not in the repo yet (see CLAUDE.md, "Reference material still
+ * missing"). What is here comes from CLAUDE.md's Design section only — enough
+ * to keep the scaffold from looking like unstyled HTML. Task 4.1 replaces this
+ * wholesale with the prototype's custom properties; do not build components
+ * against these values in the meantime.
+ */
+
+:root {
+  /* Paper and ink */
+  --paper: #faf9f6;
+  --ink: #1a1a1a;
+  --ink-muted: #5c5c5c;
+  --rule: #e0ddd6;
+
+  /* The one accent. Dykem layout blue. */
+  --dykem: #1f45a3;
+
+  /* Warnings are amber and never block (REQUIREMENTS §4 FR-2). */
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+
+  /* Results panel is dark. */
+  --panel: #1c1f26;
+  --panel-ink: #f4f3f0;
+
+  --font-sans:
+    'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2.5rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Every number in this app is a quantity in a column. */
+table,
+input[type='number'],
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.shell {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3);
+}
+
+.muted {
+  color: var(--ink-muted);
+}

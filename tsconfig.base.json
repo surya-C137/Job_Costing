@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "moduleDetection": "force",
+
+    /* Strict everywhere (CLAUDE.md, REQUIREMENTS §2). The three below are not
+       part of `strict` but matter for a costing engine: an out-of-range table
+       lookup should be `T | undefined`, not a silent `T`. */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+
+    /* Resolve workspace packages to their source rather than to `dist`, so
+       `npm run typecheck` works on a clean checkout without building first.
+       Runtime still resolves through each package's `exports` to `dist`;
+       `npm run build` is what produces it. Paths are relative to this file,
+       which is the repo root. */
+    "baseUrl": ".",
+    "paths": {
+      "@shopquote/calc": ["packages/calc/src/index.ts"],
+      "@shopquote/calc/*": ["packages/calc/src/*"],
+      "@shopquote/db": ["packages/db/src/index.ts"],
+      "@shopquote/db/*": ["packages/db/src/*"]
+    }
+  }
+}
