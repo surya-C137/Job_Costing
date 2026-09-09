@@ -7,7 +7,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Internal quoting system for a sheet metal job shop. Replaces a 1998-era Excel estimator. Read `REQUIREMENTS.md` before working; `BUILD-PLAN.md` is the ordered task list.
 
 ## Current state — read this first
-No code exists yet. On disk: `CLAUDE.md`, `docs/REQUIREMENTS.md` (the spec; § numbers are cited from everywhere), `docs/BUILD-PLAN.md` (ordered tasks, each ≤ one session, with prompts and acceptance checks), and `docs/reference/Quote_Metal_Cost.xls`. Git initialized on `main`, nothing committed yet. There is no `package.json` and no workspaces — the commands and layout below describe the target, not what's on disk. `docs/decisions.md`, `docs/discovery.md`, `docs/parity-report.md`, and `docs/pilot-log.md` are created as the work reaches them.
+**Done through BUILD-PLAN Task 0.2.** No TypeScript exists yet: there is no `package.json` and no workspaces, so the commands and layout below describe the target, not what's on disk. What is on disk:
+
+```
+CLAUDE.md · docs/REQUIREMENTS.md · docs/BUILD-PLAN.md   the spec set
+docs/reference/Quote_Metal_Cost.xls                     the workbook
+docs/decisions.md · docs/discovery.md                   choices made · unresolved cells
+scripts/extract-workbook.py                             Task 0.2
+packages/db/seed/*.json                                 10 seed files, 80 materials
+packages/calc/test/fixtures/golden-workbook.json        the §9 fixture
+```
+
+`scripts/extract-workbook.py` is re-runnable and idempotent: it rewrites the seed JSON and refreshes only its own delimited block in `docs/discovery.md`, so hand-written Phase 0.1 notes survive. It prints the six §9 selling prices and exits non-zero if any drifts past ±0.005 — a cheap regression check if the workbook is ever replaced with a newer save. `docs/parity-report.md` (Task 1.5) and `docs/pilot-log.md` (Task 5.2) don't exist yet.
+
+**Two quirks are now confirmed from the workbook, not inferred.** Q2's machine-op factor is exactly 60.0, recovered as `G33 × F33 / E33`; the 12-inch minimum strip solves to exactly 12 from `W7 / (V7, Q170, R170)`. Both are recorded in `docs/decisions.md`. Six cells remain genuinely unresolved and need the owner — see `docs/discovery.md`.
 
 **Reference material still missing.** BUILD-PLAN lists these as prerequisites for Task 1.1:
 - `docs/reference/sheet-metal-material-calculator.html` — the prototype. Source of the design tokens (see Design, below), the nesting math (`nest`, `costAt`, `computePart`), and the CSV/PDF resolvers (`resolveMaterial`, `resolveThickness`, `parseCSV`, `mapHeaders`, `parseDrawingText`). Tasks 1.2, 3.3, 4.1 and 4.3 all cite it.
@@ -17,7 +30,7 @@ Ask for these rather than reinventing them; the design system and the intake heu
 
 **The workbook is the source of truth.** Task 0.2 extracts the seed JSON *and* the golden fixture from its cached values — explicitly not typed by hand. Don't substitute the excerpt in REQUIREMENTS §6 (a partial table, ~12 of ~80 materials) or hand-enter the §9 numbers as a fixture; a fixture typed from the spec proves only that you can copy, not that the engine matches the workbook.
 
-**Where to start.** Task 0.2 (extract workbook → seed JSON), then 1.1 (scaffold). Tasks are ordered and each assumes the previous is green. The golden test must pass before any UI work (§9).
+**Where to start.** Task 1.1 (scaffold the monorepo). Note that `packages/db/seed/` and `packages/calc/test/fixtures/` already hold files — scaffold around them, don't overwrite them. Tasks are ordered and each assumes the previous is green. The golden test must pass before any UI work (§9).
 
 ## What matters most
 1. **Parity first.** The costing engine must reproduce the shop's workbook (`docs/reference/Quote_Metal_Cost.xls`) to the cent. The golden test in `packages/calc/test/golden.test.ts` is the definition of correct. Never edit the fixture to make a test pass — trace the formula in the xls, fix the engine, explain the discrepancy in the commit message.

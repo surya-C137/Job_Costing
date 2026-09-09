@@ -1,0 +1,352 @@
+[
+  {
+    "item": 1,
+    "row": 74,
+    "key": "no-plating-selected",
+    "spec": "NO PLATING SELECTED",
+    "lot_min_charge": 0.0,
+    "price_per_sq_in": 0.0,
+    "part_min": 0.0,
+    "active": true
+  },
+  {
+    "item": 2,
+    "row": 75,
+    "key": "anodize-chromic-mil-8625-type-i-class-1-dyed",
+    "spec": "ANODIZE,  CHROMIC MIL-8625 TYPE I, CLASS 1 (DYED)",
+    "lot_min_charge": 125.0,
+    "price_per_sq_in": 0.05,
+    "part_min": 0.55,
+    "active": true
+  },
+  {
+    "item": 3,
+    "row": 76,
+    "key": "anodize-chromic-mil-8625-type-i-class-2-non-dyed",
+    "spec": "ANODIZE,  CHROMIC MIL-8625 TYPE I, CLASS 2 (NON DYED)",
+    "lot_min_charge": 125.0,
+    "price_per_sq_in": 0.05,
+    "part_min": 0.55,
+    "active": true
+  },
+  {
+    "item": 4,
+    "row": 77,
+    "key": "anodize-sulp-mil-8625-type-ii-class-1-non-dyed",
+    "spec": "ANODIZE,  SULP MIL-8625 TYPE II, CLASS 1 (NON DYED)",
+    "lot_min_charge": 55.0,
+    "price_per_sq_in": 0.009,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 5,
+    "row": 78,
+    "key": "anodize-sulp-mil-8625-type-ii-class-2-dyed",
+    "spec": "ANODIZE,  SULP MIL-8625 TYPE II, CLASS 2  (DYED)",
+    "lot_min_charge": 60.0,
+    "price_per_sq_in": 0.01,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 6,
+    "row": 79,
+    "key": "anodize-sulp-mil-8625-type-iii-class-1-non-dyed",
+    "spec": "ANODIZE,  SULP MIL-8625 TYPE III, CLASS 1  (NON-DYED)",
+    "lot_min_charge": 80.0,
+    "price_per_sq_in": 0.02,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 7,
+    "row": 80,
+    "key": "anodize-sulp-mil-8625-type-iii-class-2-dyed",
+    "spec": "ANODIZE,  SULP MIL-8625 TYPE III, CLASS 2  (DYED)",
+    "lot_min_charge": 80.0,
+    "price_per_sq_in": 0.022,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 9,
+    "row": 82,
+    "key": "black-oxide-mil-c-13924-class-1-iron-stl",
+    "spec": "BLACK OXIDE MIL-C-13924, CLASS 1 (IRON/STL)",
+    "lot_min_charge": 0.0,
+    "price_per_sq_in": 0.0,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 10,
+    "row": 83,
+    "key": "black-oxide-mil-c-13924-class-4-st-stl",
+    "spec": "BLACK OXIDE MIL-C-13924, CLASS 4 (ST STL)",
+    "lot_min_charge": 0.0,
+    "price_per_sq_in": 0.0,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 12,
+    "row": 85,
+    "key": "cadmium-qq-p-416-type-ii-gold-class-2-0003",
+    "spec": "CADMIUM, QQ-P-416, TYPE II (GOLD), CLASS 2 (.0003)",
+    "lot_min_charge": null,
+    "price_per_sq_in": null,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 14,
+    "row": 87,
+    "key": "chem-film-m-c-5541-class-1a-clear",
+    "spec": "CHEM FILM  M-C-5541, CLASS 1A, CLEAR",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.0075,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 15,
+    "row": 88,
+    "key": "chem-film-m-c-5541-class-1a-gold",
+    "spec": "CHEM FILM  M-C-5541, CLASS 1A, GOLD",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.008,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 16,
+    "row": 89,
+    "key": "chrome-qq-c-320-class-1a-type-i-bright",
+    "spec": "CHROME, QQ-C-320, CLASS 1A, TYPE I (BRIGHT)",
+    "lot_min_charge": 0.0,
+    "price_per_sq_in": 0.0,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 17,
+    "row": 90,
+    "key": "chrome-qq-c-320-class-1a-type-ii-satin",
+    "spec": "CHROME, QQ-C-320, CLASS 1A, TYPE II (SATIN)",
+    "lot_min_charge": 0.0,
+    "price_per_sq_in": 0.0,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 19,
+    "row": 92,
+    "key": "nickel-bright-qq-n-290-class-1-grade-a-0016",
+    "spec": "NICKEL, BRIGHT, QQ-N-290, CLASS 1, GRADE A (.0016)",
+    "lot_min_charge": 125.0,
+    "price_per_sq_in": 0.04,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 20,
+    "row": 93,
+    "key": "nickel-bright-qq-n-290-class-1-grade-c",
+    "spec": "NICKEL, BRIGHT, QQ-N-290, CLASS 1, GRADE C",
+    "lot_min_charge": 125.0,
+    "price_per_sq_in": 0.15,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 21,
+    "row": 94,
+    "key": "nickel-elect-mil-c-26074-class-2-grade-a",
+    "spec": "NICKEL, ELECT, MIL-C-26074, CLASS 2, GRADE A",
+    "lot_min_charge": 125.0,
+    "price_per_sq_in": 0.04,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 22,
+    "row": 95,
+    "key": "nickel-elect-mil-c-26074-class-3-grade-b",
+    "spec": "NICKEL, ELECT, MIL-C-26074, CLASS 3, GRADE B",
+    "lot_min_charge": 125.0,
+    "price_per_sq_in": 0.04,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 24,
+    "row": 97,
+    "key": "passivate-qq-p-35-type-vi-low-temp",
+    "spec": "PASSIVATE QQ-P-35, TYPE VI (LOW TEMP)",
+    "lot_min_charge": 70.0,
+    "price_per_sq_in": 0.01,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 25,
+    "row": 98,
+    "key": "passivate-qq-p-35-type-vii-med-temp",
+    "spec": "PASSIVATE QQ-P-35, TYPE VII (MED TEMP)",
+    "lot_min_charge": 100.0,
+    "price_per_sq_in": 0.01,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 26,
+    "row": 99,
+    "key": "passivate-qq-p-35-type-viii-med-temp-hna",
+    "spec": "PASSIVATE QQ-P-35, TYPE VIII (MED TEMP HNA)",
+    "lot_min_charge": 100.0,
+    "price_per_sq_in": 0.01,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 28,
+    "row": 101,
+    "key": "tin-mil-t-10727-type-1-0001-00025",
+    "spec": "TIN, MIL-T-10727, TYPE 1 (.0001-.00025 )",
+    "lot_min_charge": 75.0,
+    "price_per_sq_in": 0.045,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 30,
+    "row": 103,
+    "key": "zinc-type-ii-class-1-black-fe-zn-5-sc1",
+    "spec": "ZINC, TYPE II, CLASS 1 BLACK Fe/Zn 5 (SC1)",
+    "lot_min_charge": 75.0,
+    "price_per_sq_in": 0.01,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 31,
+    "row": 104,
+    "key": "zinc-type-ii-class-2-black-fe-zn-8-sc2",
+    "spec": "ZINC, TYPE II, CLASS 2 BLACK Fe/Zn 8 (SC2)",
+    "lot_min_charge": 75.0,
+    "price_per_sq_in": 0.015,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 32,
+    "row": 105,
+    "key": "zinc-type-ii-class-3-black-fe-zn-13-sc3",
+    "spec": "ZINC, TYPE II, CLASS 3 BLACK Fe/Zn 13 (SC3)",
+    "lot_min_charge": 75.0,
+    "price_per_sq_in": 0.03,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 33,
+    "row": 106,
+    "key": "zinc-type-ii-class-4-black-fe-zn-25-sc4",
+    "spec": "ZINC, TYPE II, CLASS 4 BLACK Fe/Zn 25 (SC4)",
+    "lot_min_charge": 175.0,
+    "price_per_sq_in": 0.04,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 34,
+    "row": 107,
+    "key": "zinc-type-iii-class-1-clear-fe-zn-5-sc1",
+    "spec": "ZINC, TYPE III, CLASS 1 CLEAR Fe/Zn 5 (SC1)",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.008,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 35,
+    "row": 108,
+    "key": "zinc-type-iii-class-2-clear-fe-zn-8-sc2",
+    "spec": "ZINC, TYPE III, CLASS 2 CLEAR Fe/Zn 8 (SC2)",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.012,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 36,
+    "row": 109,
+    "key": "zinc-type-iii-class-3-clear-fe-zn-13-sc3",
+    "spec": "ZINC, TYPE III, CLASS 3 CLEAR Fe/Zn 13 (SC3)",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.016,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 37,
+    "row": 110,
+    "key": "zinc-type-iii-class-4-clear-fe-zn-25-sc4",
+    "spec": "ZINC, TYPE III, CLASS 4 CLEAR Fe/Zn 25 (SC4)",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.04,
+    "part_min": 0.3,
+    "active": true
+  },
+  {
+    "item": 38,
+    "row": 111,
+    "key": "zinc-type-ii-class-1-gold-fe-zn-5-sc1",
+    "spec": "ZINC, TYPE II, CLASS 1 GOLD Fe/Zn 5 (SC1)",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.008,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 39,
+    "row": 112,
+    "key": "zinc-type-ii-class-2-gold-fe-zn-8-sc2",
+    "spec": "ZINC, TYPE II, CLASS 2 GOLD Fe/Zn 8 (SC2)",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.012,
+    "part_min": 0.25,
+    "active": true
+  },
+  {
+    "item": 40,
+    "row": 113,
+    "key": "zinc-type-ii-class-3-gold-fe-zn-13-sc3",
+    "spec": "ZINC, TYPE II, CLASS 3 GOLD Fe/Zn 13 (SC3)",
+    "lot_min_charge": 50.0,
+    "price_per_sq_in": 0.016,
+    "part_min": 0.35,
+    "active": true
+  },
+  {
+    "item": 41,
+    "row": 114,
+    "key": "zinc-type-ii-class-4-gold-fe-zn-25-sc4",
+    "spec": "ZINC, TYPE II, CLASS 4 GOLD Fe/Zn 25 (SC4)",
+    "lot_min_charge": 125.0,
+    "price_per_sq_in": 0.04,
+    "part_min": 0.5,
+    "active": true
+  },
+  {
+    "item": 43,
+    "row": 116,
+    "key": "laser-etch-of-part-number-dunham-metal-processing",
+    "spec": "Laser Etch of Part Number (Dunham Metal Processing)",
+    "lot_min_charge": 75.0,
+    "price_per_sq_in": null,
+    "part_min": 0.45,
+    "active": true
+  }
+]
