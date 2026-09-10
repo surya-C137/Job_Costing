@@ -25,7 +25,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "extract-workbook": "python scripts/extract-workbook.py"
+    "extract-workbook": "python scripts/extract-workbook.py",
+    "parity-report": "node scripts/parity-report.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

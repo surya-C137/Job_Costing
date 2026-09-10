@@ -48,7 +48,7 @@ function goldenPart(): PartInput {
     finish: {
       coating: {
         coatingModelId: 'coating:powder-smooth-or-textured',
-        sidesCoated: 1,
+        sidesCoated: 2,
         maskedFeatures: 0,
       },
     },

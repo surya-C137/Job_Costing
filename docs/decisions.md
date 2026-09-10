@@ -4,6 +4,72 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Task 1.5, parity flags off, and the report
+
+`docs/parity-report.md` exists, generated rather than written, and every delta
+in it is pinned by a test.
+
+**Quirk Q4 was a flag that did nothing, and Task 1.5 is what caught it.**
+`finishesUnmarked` was declared on the coating and silkscreen contributors as
+`markupClass: 'none'` and read by nobody — switching it off produced identical
+prices to switching it on. That is precisely the failure §11.3 names, shipped
+in the Task 1.4 commit and found the moment something actually toggled the
+flag. The fix puts Q4 in `rollup.ts`, which is where §5.6 puts it: the quirk is
+not about what coating *costs*, it is about where coating sits in the
+arithmetic. With the flag off, coating and silkscreen take the material markup
+alongside plating — the other bought finishing service already in that block.
+*Alternative:* the labor block (rejected — plating is the closest analogue and
+it is material-side; a shop that disagrees is changing pricing, which is an
+owner decision, not a default).
+
+There is a lesson worth keeping: a parity flag that no test toggles is
+indistinguishable from a comment. Task 1.5's tests now assert, for all four,
+that switching the flag *moves the price* — not merely that it moves it to the
+right number.
+
+**The report is generated, not typed.** `scripts/parity-report.mjs` imports the
+built package, prices the §9 part five ways and writes the markdown;
+`npm run parity-report` regenerates it. Hand-maintaining a table of prices
+beside an engine that computes them is how the two end up disagreeing on the
+day the owner reads it. It imports `dist` rather than `src` deliberately — what
+it reports should be what the app would quote.
+
+**Q3's "off" number rests on assumed powder parameters, and says so.**
+The workbook has no source for specific gravity, film build, transfer
+efficiency or powder price — that is the whole of §10 question 2 — so the Q3
+row uses trade-typical placeholders (SG 1.5, 2 mils, 60%, $5/lb) and the report
+carries a table naming each one and where a real value comes from. Without
+them, Q3-off would price coating at zero, which is the hole §11.3 forbids; with
+them, the row is a real number that will move once the owner answers. The test
+asserts both: the number, and that an unspecified powder produces a *warning*
+rather than a zero.
+
+**The golden part is coated on both faces.** The legacy model prices off the
+perimeter and ignores sides, so this changes no §9 number; the modern model
+prices off area, where it doubles the coating. Two faces is what actually
+happens to a powder-coated sheet metal part, so both the golden test and the
+report now say so.
+
+**What the deltas came out as.** Q1 is the only flag that touches one quantity
+alone: −$2.07 at qty 1 and nothing above it, because above one the nest beats
+the minimum charge. Q2 is +$0.25 flat, the labour markup on the 0.4× of laser
+time the workbook forgives. Q3 is −$0.77 flat. Q4 is +$0.21 flat, the material
+markup on the coating. Each is one sentence in the report, which is BUILD-PLAN
+1.5's acceptance check.
+
+**The second fixture is blocked, not skipped.** `docs/discovery/quote-2.xlsx`
+does not exist; BUILD-PLAN 0.1 asks the shop for ten recent quotes and this is
+the first of them. Left as `it.todo` with a note on what the second case most
+needs to cover: a punched part, plating, hardware and NRE. The §9 case
+exercises none of those, and the punch model has no oracle whatever (see the
+Task 1.3 entry) — it is the largest untested surface in the engine.
+
+**ESLint now knows `scripts/**` is Node.** The new `.mjs` script tripped
+`no-undef` on `console`. Declared the four globals in the existing scripts
+override rather than adding the `globals` package.
+
+---
+
 ## 2026-09-10 — Task 1.4, operations, finish, roll-up, and the golden test
 
 The golden test is green: six selling prices within ±0.005, six material

@@ -33,6 +33,26 @@ import type {
 } from './types/result.js';
 import { materialParamsFor, nest } from './material.js';
 
+/**
+ * Which markup a contributor actually takes, once quirk Q4 has had its say.
+ *
+ * Q4 is the one parity flag that lives in the roll-up rather than in a cost
+ * module: it is not about what coating *costs*, it is about where coating sits
+ * in §5.6's arithmetic. With the flag on — the workbook — coating and
+ * silkscreen are added after both markups. With it off they join the material
+ * block, alongside plating, which is the other bought finishing service
+ * already there.
+ *
+ * Without this, `finishesUnmarked` would be a flag with only one side: the
+ * contributors declare `markupClass: 'none'` and switching the flag would
+ * change nothing at all. §11.3 is explicit that every flag has to produce a
+ * defensible number in both positions.
+ */
+function effectiveMarkupClass(contributor: CostContributor, config: ShopConfig): MarkupClass {
+  if (contributor.markupClass !== 'none') return contributor.markupClass;
+  return config.parity.finishesUnmarked ? 'none' : 'material';
+}
+
 /** An empty line for every bucket, so a stack always has every field. */
 function emptyBuckets(): Record<CostBucket, number> {
   return {
@@ -61,7 +81,7 @@ export function costStackAt(
   for (const contributor of contributors) {
     const result = contributor.compute(input, config, qty);
     buckets[contributor.bucket] += result.usdPerPart;
-    blocks[contributor.markupClass] += result.usdPerPart;
+    blocks[effectiveMarkupClass(contributor, config)] += result.usdPerPart;
     warnings.push(...result.warnings);
   }
 

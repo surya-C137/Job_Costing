@@ -55,7 +55,18 @@ export default tseslint.config(
     },
   },
   {
+    /* Build and tooling scripts run in Node and are meant to print. Declaring
+       the globals here rather than pulling in `globals` keeps the dependency
+       list short; extend the list if a script needs more. */
     files: ['**/*.config.{js,ts}', 'scripts/**'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        __dirname: 'readonly',
+        URL: 'readonly',
+      },
+    },
     rules: { 'no-console': 'off' },
   },
   prettier,
