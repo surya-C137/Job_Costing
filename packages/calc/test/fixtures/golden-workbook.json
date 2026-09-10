@@ -44,6 +44,7 @@
     "shop_fixed_cost_per_job": 0.0,
     "labor_markup": 1.2,
     "material_markup": 1.2,
+    "min_charge_strip_in": 12,
     "nre_total": 0.0
   },
   "intermediates": {

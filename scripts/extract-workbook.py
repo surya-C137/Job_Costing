@@ -587,6 +587,11 @@ def extract_golden(pcw: Sheet, laser: Sheet) -> dict:
     lb_ft2, ppl = pcw.num(170, "Q"), pcw.num(170, "R")
     blank_cost = round((width * blank_len / 144.0) * lb_ft2 * ppl, 6)
     laser_hrs_100 = laser.num(34, "F")
+    # The minimum-charge strip is an *input* to the case: without it a test
+    # cannot reproduce min_charge, and hand-typing 12 would be exactly the
+    # copying REQUIREMENTS §9 warns against. Solved, not read -- see
+    # extract_shop_defaults().
+    strip_in = int(round(pcw.num(7, "W") * 144.0 / (width * lb_ft2 * ppl)))
 
     return {
         "_comment": (
@@ -645,6 +650,7 @@ def extract_golden(pcw: Sheet, laser: Sheet) -> dict:
             "shop_fixed_cost_per_job": 0.0,
             "labor_markup": pcw.num(10, "C"),
             "material_markup": pcw.num(10, "D"),
+            "min_charge_strip_in": strip_in,
             "nre_total": pcw.num(24, "L"),
         },
         "intermediates": {

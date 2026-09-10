@@ -4,6 +4,92 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Task 1.2, calc types, contributor registry, material module
+
+**A machine's `timeModel` decides how it is priced, not its name.**
+`CuttingInput` is keyed `featureBased | hitBased | none` rather than
+`laser | punch`. A waterjet and a plasma torch are feature-based — a path cut at
+a speed — so a shop adds one in Settings and the existing contributor prices it.
+`Machine.kind` survives as a label for grouping and the UI, and nothing branches
+on it. This is REQUIREMENTS §12 rule 2 made concrete, and it is what the earlier
+`method: 'laser' | 'punch' | 'none'` union would have prevented. *Alternative:*
+one contributor per machine kind (rejected — five near-identical modules, and a
+sixth for every process a shop takes up).
+
+**§5.1's nesting charges kerf to every part; the prototype charges it between
+parts.** `fitCount()` is `floor(usable / (dim + kerf))`, so a part exactly
+filling the stock yields one fewer than the prototype's
+`floor((usable + gap) / (dim + gap))` would. Both reproduce the two acceptance
+cases (33 up on 48 × 96 at 0.5 kerf; 42 up on 48 × 120 at 0.375), which is why
+the difference went unnoticed — they only diverge when a part lands within one
+kerf of the edge. §5.1 is the spec and the shop's convention, so §5.1 wins.
+A `FIT_EPSILON` of 1e-9 keeps a division that should land on 6 from arriving as
+5.999999999999999.
+
+**The minimum charge is not capped at the blank length.** The prototype capped
+it (`sheetPrice × min(minStrip, sl) / sl`); §5.1 does not. A 6-inch blank still
+costs a 12-inch strip, which is the entire point of a minimum. No golden number
+moves either way. *Alternative:* follow the prototype (rejected — it would let
+a short blank price below the stock the shop has to buy).
+
+**Registries are immutable and passed in.** `createRegistry()` returns a frozen
+lookup; there is no module-level mutable map. Calc is pure, and a global
+registry is shared mutable state that would make one test's registration visible
+to the next. A second trade calls `createRegistry()` with its own list.
+`resolve()` returns `unknown` ids separately so the caller warns rather than
+pricing a switched-on module as zero (§12 rule 3). Duplicate ids throw — that is
+a programming error at startup, not an expected condition, so it is the one
+place calc throws.
+
+**"Part does not fit" is both a typed failure and a warning.** `materialForPart()`
+returns `Result` with `part-does-not-fit` so a caller can refuse; the contributor
+turns it into an amber warning and returns $0, because CLAUDE.md's Design section
+lists it among warnings that never block. The estimator sees the rest of the
+stack and fixes the stock size. Task 1.4's roll-up must not print a quote
+carrying that warning.
+
+**Material surcharge folds into the effective $/lb.** It is a price adjustment on
+the same stock (§11.2), so `pricePerLbUsd × (1 + surchargePct)` feeds blank cost
+and minimum charge alike. §5.6's `sheet_extras` bucket stays free for freight-in
+and the like. Zero on every seeded row, so no golden number moves.
+
+**Scrap credit is not implemented yet.** §5.1's share-of-blank has no scrap term
+and the golden case has no scrap. `MaterialRow.scrapPricePerLbUsd` and
+`MaterialFamily.defaultScrapPricePerLbUsd` exist so the schema does not move
+later; §11.4 item 4 keeps the feature off by default. The prototype's `costAt()`
+has three costing methods (full sheet, yield, net footprint) with scrap credit in
+each — none of that is §5.1, so none of it was ported.
+
+**A per-workspace Vitest config, because the acceptance check needs one.**
+`npm test -w packages/calc` — BUILD-PLAN's per-task check — failed with "No
+projects were found": the root config's `projects: ['packages/*', 'apps/*']`
+globs resolve against Vitest's root, which becomes the package directory when
+run that way. `packages/calc/vitest.config.ts` gives the workspace a root of its
+own. It deliberately has no `@shopquote/*` alias: a path back to a sibling
+package is what must never resolve from calc.
+
+**Coverage excludes three type-only modules.** `types/config.ts`, `types/part.ts`
+and `types/contributor.ts` compile to nothing, so v8 counts every interface body
+and JSDoc line as uncovered — `config.ts` alone is ~400 such lines, and the calc
+threshold came out at 28% with the runtime code fully covered. `types/result.ts`
+and `types/index.ts` are not excluded: they carry `ok()` and `err()`.
+`packages/calc/src` now measures 99.6% statements, 98.7% branches, 100%
+functions. *Alternative:* a `*.types.ts` naming convention and one glob
+(reasonable, and worth doing if the list grows past a handful).
+
+**The golden `ShopConfig` is built in a test helper, not from the seed.**
+`test/helpers/golden-config.ts` assembles a config from the fixture's own inputs.
+The seed-JSON-to-`ShopConfig` adapter — which has to split the workbook's
+speed/pierce/punch-factor columns into `machineMaterialRates`, since §3 keeps
+machine numbers off the material row — is still owed. BUILD-PLAN 2.1 has
+`seed.ts` doing it, but Task 1.4's golden test runs with no database, so it needs
+the same mapping first. Write it once in 1.4 and have `seed.ts` reuse it.
+Three §5.2 constants the fixture does not carry (`intersectionSec` 0.3,
+`rapidSecPerPierce` 0.6, `palletThresholdParts` 100) are set from §5.2's stated
+values in that helper and are pinned properly by Task 1.3's laser oracle.
+
+---
+
 ## 2026-09-10 — Spec reconciliation before Task 1.2
 
 Ten discrepancies found reviewing the revised REQUIREMENTS/BUILD-PLAN/CLAUDE.md against
