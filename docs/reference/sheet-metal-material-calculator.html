@@ -1,0 +1,1522 @@
+<!--
+  Sheet metal material & nesting calculator — embeddable, single file.
+  Single part, CSV batch, and PDF drawing intake.
+
+  Embed: paste from <div id="smc"> through </script> into your page, or iframe this file (height ~1400px).
+  Config: edit SMC_CONFIG at the top of the script (prices, minimum charge strip, markup, breaks,
+          lead endpoint, optional AI drawing-reader endpoint).
+  PDF reading loads pdf.js from cdnjs the first time a drawing is dropped; nothing else is external.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<div id="smc">
+  <style>
+    #smc {
+      --paper: #F4F5F3;
+      --ink: #1C2025;
+      --muted: #6B7178;
+      --line: #CFD3D6;
+      --field: #FFFFFF;
+      --dykem: #1F45A3;
+      --dykem-soft: #E9EEF9;
+      --sheet: #DCDFE2;
+      --warnbg: #FFF3D6;
+      --warnink: #6B4B00;
+      --okink: #2E7D4F;
+      font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+      font-variant-numeric: tabular-nums;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+      box-sizing: border-box;
+    }
+
+    #smc *,
+    #smc *::before,
+    #smc *::after {
+      box-sizing: border-box;
+    }
+
+    #smc .smc-head {
+      margin-bottom: 22px;
+      max-width: 64ch;
+    }
+
+    #smc .smc-head h2 {
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin: 0 0 6px;
+      line-height: 1.2;
+    }
+
+    #smc .smc-head p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    #smc h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0 0 4px;
+    }
+
+    #smc .smc-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 26px;
+    }
+
+    @media (min-width: 880px) {
+      #smc .smc-grid {
+        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+        gap: 36px;
+      }
+
+      #smc .smc-right {
+        position: sticky;
+        top: 16px;
+        align-self: start;
+      }
+    }
+
+    #smc fieldset {
+      border: 0;
+      padding: 0;
+      margin: 0 0 22px;
+      min-width: 0;
+    }
+
+    #smc legend {
+      font-weight: 600;
+      font-size: 15px;
+      padding: 0 0 6px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #smc legend .smc-seg {
+      font-weight: 400;
+    }
+
+    #smc .smc-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin-bottom: 10px;
+    }
+
+    #smc .smc-row.three {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    #smc label.smc-f {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      min-width: 0;
+    }
+
+    #smc label.smc-f span.smc-l {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    #smc input[type=number],
+    #smc input[type=text],
+    #smc input[type=email],
+    #smc select {
+      width: 100%;
+      font: inherit;
+      font-size: 15px;
+      color: var(--ink);
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 8px 10px;
+      height: 38px;
+    }
+
+    #smc input[type=number] {
+      text-align: right;
+    }
+
+    #smc input:focus,
+    #smc select:focus,
+    #smc button:focus {
+      outline: 2px solid var(--dykem);
+      outline-offset: 1px;
+      border-color: var(--dykem);
+    }
+
+    #smc input:disabled {
+      color: var(--muted);
+      background: var(--paper);
+    }
+
+    #smc .smc-unit {
+      position: relative;
+    }
+
+    #smc .smc-unit input {
+      padding-right: 40px;
+    }
+
+    #smc .smc-unit i {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-style: normal;
+      font-size: 12px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    #smc .smc-unit.lead input {
+      padding-left: 24px;
+      padding-right: 10px;
+    }
+
+    #smc .smc-unit.lead i {
+      left: 10px;
+      right: auto;
+    }
+
+    #smc .smc-unit.lead.tail input {
+      padding-right: 40px;
+    }
+
+    #smc .smc-unit.lead.tail i.tail {
+      left: auto;
+      right: 10px;
+    }
+
+    #smc .smc-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      margin: 4px 0 8px;
+    }
+
+    #smc .smc-check input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--dykem);
+    }
+
+    #smc .smc-seg {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    #smc .smc-seg button {
+      font: inherit;
+      font-size: 13px;
+      padding: 5px 11px;
+      border: 0;
+      background: var(--field);
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    #smc .smc-seg button+button {
+      border-left: 1px solid var(--line);
+    }
+
+    #smc .smc-seg button[aria-pressed=true] {
+      background: var(--dykem);
+      color: #fff;
+    }
+
+    #smc .smc-hint {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin: -4px 0 10px;
+    }
+
+    #smc .smc-preview {
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 14px 16px 10px;
+      margin-bottom: 16px;
+    }
+
+    #smc .smc-preview svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    #smc .smc-preview-cap {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    #smc .smc-preview-cap b {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    #smc .smc-result {
+      background: var(--ink);
+      color: #fff;
+      border-radius: 6px;
+      padding: 18px 20px 16px;
+    }
+
+    #smc .smc-big {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    #smc .smc-big strong {
+      font-size: 40px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+
+    #smc .smc-big span {
+      font-size: 14px;
+      opacity: .8;
+    }
+
+    #smc .smc-sub {
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: .85;
+    }
+
+    #smc .smc-sub b {
+      font-weight: 600;
+      opacity: 1;
+    }
+
+    #smc table.smc-bd {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+
+    #smc table.smc-bd td {
+      padding: 7px 0;
+      border-top: 1px solid rgba(255, 255, 255, .14);
+      vertical-align: top;
+    }
+
+    #smc table.smc-bd td:last-child {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    #smc table.smc-bd td small {
+      display: block;
+      opacity: .65;
+      font-size: 12px;
+    }
+
+    #smc table.smc-bd tr.smc-total td {
+      border-top: 1px solid rgba(255, 255, 255, .4);
+      font-weight: 600;
+    }
+
+    #smc table.smc-bd tr.smc-credit td:last-child {
+      color: #9FD8B4;
+    }
+
+    #smc table.smc-bd tr.smc-sell td {
+      color: #FFD98A;
+    }
+
+    #smc table.smc-bd tr.hide {
+      display: none;
+    }
+
+    #smc .smc-sec {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, .14);
+      font-size: 13px;
+    }
+
+    #smc .smc-sec p {
+      margin: 0 0 8px;
+      opacity: .8;
+    }
+
+    #smc .smc-sec table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    #smc .smc-sec td,
+    #smc .smc-sec th {
+      padding: 4px 0;
+      text-align: right;
+      font-weight: 400;
+    }
+
+    #smc .smc-sec td:first-child,
+    #smc .smc-sec th:first-child {
+      text-align: left;
+    }
+
+    #smc .smc-sec th {
+      opacity: .6;
+      font-size: 12px;
+    }
+
+    #smc .smc-methods tr.on td {
+      color: #fff;
+      font-weight: 500;
+    }
+
+    #smc .smc-methods tr.on td:first-child::before {
+      content: "●";
+      margin-right: 6px;
+      font-size: 9px;
+      vertical-align: 2px;
+    }
+
+    #smc .smc-methods tr:not(.on) td {
+      opacity: .6;
+    }
+
+    #smc .smc-breaks tr.cur td {
+      color: #fff;
+      font-weight: 500;
+    }
+
+    #smc .smc-breaks tr.min td:last-child::after {
+      content: " *";
+      opacity: .7;
+    }
+
+    #smc .smc-breaks-note {
+      opacity: .6;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    #smc .smc-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    #smc .smc-actions input[type=email] {
+      flex: 1 1 180px;
+      height: 36px;
+    }
+
+    #smc button.smc-btn {
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 4px;
+      border: 1px solid var(--line);
+      background: var(--field);
+      color: var(--ink);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #smc button.smc-btn.primary {
+      background: var(--dykem);
+      border-color: var(--dykem);
+      color: #fff;
+    }
+
+    #smc button.smc-btn.small {
+      height: 30px;
+      padding: 0 10px;
+      font-size: 13px;
+    }
+
+    #smc button.smc-btn:disabled {
+      opacity: .5;
+      cursor: default;
+    }
+
+    #smc .smc-note {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-top: 10px;
+      min-height: 1.2em;
+    }
+
+    #smc .smc-warn {
+      background: var(--warnbg);
+      color: var(--warnink);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 13px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    #smc .smc-warn.show {
+      display: block;
+    }
+
+    /* Batch and drawings */
+    #smc .smc-batch {
+      margin-top: 40px;
+      border-top: 2px solid var(--line);
+      padding-top: 24px;
+    }
+
+    #smc .smc-batch-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    #smc .smc-batch-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 60ch;
+    }
+
+    #smc .smc-toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    #smc .smc-drop {
+      border: 1.5px dashed var(--line);
+      border-radius: 6px;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      background: var(--field);
+      margin-bottom: 14px;
+      transition: border-color .12s, background .12s;
+    }
+
+    #smc .smc-drop.over {
+      border-color: var(--dykem);
+      background: var(--dykem-soft);
+      color: var(--ink);
+    }
+
+    #smc .smc-drop b {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    #smc .smc-drop input {
+      display: none;
+    }
+
+    #smc .smc-drop label {
+      color: var(--dykem);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    #smc .smc-tablewrap {
+      overflow-x: auto;
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    #smc table.smc-parts {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      min-width: 900px;
+    }
+
+    #smc table.smc-parts th,
+    #smc table.smc-parts td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    #smc table.smc-parts th {
+      font-weight: 500;
+      color: var(--muted);
+      font-size: 12.5px;
+      background: var(--paper);
+      position: sticky;
+      top: 0;
+    }
+
+    #smc table.smc-parts th:nth-child(-n+4),
+    #smc table.smc-parts td:nth-child(-n+4) {
+      text-align: left;
+    }
+
+    #smc table.smc-parts td.smc-part {
+      font-weight: 500;
+    }
+
+    #smc table.smc-parts td small {
+      display: block;
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 400;
+    }
+
+    #smc table.smc-parts tr.smc-issue td.smc-part::before {
+      content: "▲ ";
+      color: var(--warnink);
+      font-size: 10px;
+    }
+
+    #smc table.smc-parts tfoot td {
+      font-weight: 600;
+      border-bottom: 0;
+      border-top: 2px solid var(--line);
+    }
+
+    #smc table.smc-parts td.smc-rowact {
+      text-align: right;
+    }
+
+    #smc table.smc-parts td.smc-rowact button {
+      background: none;
+      border: 0;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      padding: 2px 6px;
+    }
+
+    #smc table.smc-parts td.smc-rowact button:hover {
+      color: var(--dykem);
+    }
+
+    #smc .smc-empty {
+      padding: 26px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    #smc .smc-issues {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: var(--warnink);
+    }
+
+    #smc .smc-drawings {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    #smc .smc-dwg {
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 640px) {
+      #smc .smc-dwg {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    #smc .smc-dwg canvas {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      display: block;
+    }
+
+    #smc .smc-dwg-name {
+      font-weight: 500;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: baseline;
+    }
+
+    #smc .smc-dwg-name small {
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 12.5px;
+    }
+
+    #smc .smc-dwg-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px 12px;
+    }
+
+    #smc .smc-dwg-fields label.smc-f span.smc-l {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    #smc .smc-dwg-fields input,
+    #smc .smc-dwg-fields select {
+      height: 34px;
+      font-size: 14px;
+      padding: 6px 8px;
+    }
+
+    #smc .smc-tag {
+      font-size: 10.5px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--paper);
+      color: var(--muted);
+    }
+
+    #smc .smc-tag.found {
+      background: #E3F2E8;
+      color: var(--okink);
+    }
+
+    #smc .smc-tag.guess {
+      background: var(--warnbg);
+      color: var(--warnink);
+    }
+
+    #smc .smc-tag.missing {
+      background: #F7E1E1;
+      color: #8A2E2E;
+    }
+
+    #smc .smc-dwg-act {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    #smc .smc-dwg-msg {
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+  </style>
+
+  <div class="smc-head">
+    <h2>Sheet metal material calculator</h2>
+    <p>Cost one part below, or drop a CSV parts list or PDF drawings further down to cost a whole job at once.</p>
+  </div>
+
+  <div class="smc-grid">
+    <div class="smc-left">
+      <fieldset>
+        <legend>Material</legend>
+        <div class="smc-row">
+          <label class="smc-f"><span class="smc-l">Alloy</span><select id="smc-mat"></select></label>
+          <label class="smc-f"><span class="smc-l">Thickness</span><select id="smc-gauge"></select></label>
+        </div>
+        <div class="smc-row three">
+          <label class="smc-f"><span class="smc-l">Decimal</span>
+            <div class="smc-unit"><input type="number" id="smc-thk" step="0.0001" min="0.001"><i>in</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Weight</span>
+            <div class="smc-unit"><input type="number" id="smc-lbsqft" step="0.001" min="0.01"><i>lb/ft²</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Density</span>
+            <div class="smc-unit"><input type="number" id="smc-dens" step="0.0001" min="0.01"><i>lb/in³</i></div>
+          </label>
+        </div>
+        <p class="smc-hint">Weight per square foot is what your supplier's tag says. Edit it if your stock differs.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Part (flat pattern)
+          <span class="smc-seg" role="group" aria-label="Part units"><button type="button" id="smc-u-in"
+              aria-pressed="true">in</button><button type="button" id="smc-u-mm" aria-pressed="false">mm</button></span>
+        </legend>
+        <div class="smc-row three">
+          <label class="smc-f"><span class="smc-l">Length</span>
+            <div class="smc-unit"><input type="number" id="smc-pl" step="0.01" min="0.01" value="13.38"><i
+                class="smc-pu">in</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Width</span>
+            <div class="smc-unit"><input type="number" id="smc-pw" step="0.01" min="0.01" value="7.86"><i
+                class="smc-pu">in</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Quantity</span><input type="number" id="smc-qty" step="1" min="1"
+              value="50"></label>
+        </div>
+        <div class="smc-row">
+          <label class="smc-f"><span class="smc-l">Part number (optional)</span><input type="text" id="smc-pn"
+              placeholder="e.g. 210338-001"></label>
+          <label class="smc-f"><span class="smc-l">Finished area (optional)</span>
+            <div class="smc-unit"><input type="number" id="smc-area" step="0.1" min="0" placeholder="L × W"><i
+                class="smc-pu2">in²</i></div>
+          </label>
+        </div>
+        <p class="smc-hint">Leave area blank for a rectangular blank. Enter net flat area if the part has large cutouts
+          — it changes finished weight, not nesting.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Sheet and nesting</legend>
+        <div class="smc-row three">
+          <label class="smc-f"><span class="smc-l">Process</span><select id="smc-proc"></select></label>
+          <label class="smc-f"><span class="smc-l">Part spacing (kerf + web)</span>
+            <div class="smc-unit"><input type="number" id="smc-gap" step="0.01" min="0"><i>in</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Clamp strip (one edge)</span>
+            <div class="smc-unit"><input type="number" id="smc-clamp" step="0.01" min="0"><i>in</i></div>
+          </label>
+        </div>
+        <div class="smc-row three">
+          <label class="smc-f"><span class="smc-l">Stock sheet</span><select id="smc-sheet"></select></label>
+          <label class="smc-f"><span class="smc-l">Length</span>
+            <div class="smc-unit"><input type="number" id="smc-sl" step="0.1" min="1"><i>in</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Width</span>
+            <div class="smc-unit"><input type="number" id="smc-sw" step="0.1" min="1"><i>in</i></div>
+          </label>
+        </div>
+        <div class="smc-row three">
+          <label class="smc-f"><span class="smc-l">Edge trim (other edges)</span>
+            <div class="smc-unit"><input type="number" id="smc-edge" step="0.01" min="0" value="0"><i>in</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Parts per sheet override</span><input type="number" id="smc-pps"
+              step="1" min="1" placeholder="auto"></label>
+          <label class="smc-check" style="align-self:end;margin-bottom:6px"><input type="checkbox" id="smc-rot" checked>
+            Try rotated 90°</label>
+        </div>
+        <p class="smc-hint">Straight grid with spacing added to each part and the clamp strip off one long edge — the
+          way estimators do it by hand. Use the override for a CAM-nested count.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Pricing</legend>
+        <div class="smc-row three">
+          <label class="smc-f"><span class="smc-l">Price basis</span><br>
+            <div class="smc-seg" role="group" aria-label="Price basis"><button type="button" id="smc-basis-lb"
+                aria-pressed="true">Per lb</button><button type="button" id="smc-basis-sheet" aria-pressed="false">Per
+                sheet</button></div>
+          </label>
+          <label class="smc-f"><span class="smc-l" id="smc-price-label">Material $/lb</span>
+            <div class="smc-unit lead"><i>$</i><input type="number" id="smc-price" step="0.01" min="0"></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Costing method</span>
+            <select id="smc-method">
+              <option value="yield">Share of sheet at this yield</option>
+              <option value="full">Full sheets purchased</option>
+              <option value="net">Net footprint only</option>
+            </select></label>
+        </div>
+        <div class="smc-row three">
+          <label class="smc-f"><span class="smc-l">Minimum charge strip</span>
+            <div class="smc-unit"><input type="number" id="smc-minstrip" step="1" min="0"><i>in</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Material markup</span>
+            <div class="smc-unit"><input type="number" id="smc-markup" step="1" min="0"><i>%</i></div>
+          </label>
+          <label class="smc-f"><span class="smc-l">Scrap value</span>
+            <div class="smc-unit lead tail"><i>$</i><input type="number" id="smc-scrap" step="0.01" min="0"><i
+                class="tail">/lb</i></div>
+          </label>
+        </div>
+        <label class="smc-check"><input type="checkbox" id="smc-scrapon"> Credit skeleton and drops at scrap
+          value</label>
+        <p class="smc-hint">Share-of-sheet is how most job shops price it. Full sheets is what you buy for a one-off.
+          Net footprint is the floor for repeat parts from stock. The minimum charge is a full-width strip of stock — it
+          protects you on qty 1–5. Method, minimum, markup and scrap settings also apply to the parts list below.</p>
+      </fieldset>
+    </div>
+
+    <div class="smc-right">
+      <div class="smc-preview">
+        <svg id="smc-svg" viewBox="0 0 600 300" role="img" aria-label="Nesting preview"></svg>
+        <div class="smc-preview-cap">
+          <div><b id="smc-cap-pps">–</b> parts per sheet</div>
+          <div><b id="smc-cap-yield">–</b> yield</div>
+          <div><b id="smc-cap-orient">–</b></div>
+          <div><b id="smc-cap-sheets">–</b> sheets to buy</div>
+        </div>
+      </div>
+      <div class="smc-result" aria-live="polite">
+        <div class="smc-big"><strong id="smc-perpart">$0.00</strong><span>material cost per part</span></div>
+        <div class="smc-sub"><b id="smc-total">$0.00</b> for <b id="smc-qty-echo">0</b> parts <span
+            id="smc-method-echo"></span></div>
+        <table class="smc-bd">
+          <tr>
+            <td>Part weight<small id="smc-pw-note"></small></td>
+            <td id="smc-partwt">–</td>
+          </tr>
+          <tr>
+            <td>Sheet weight<small id="smc-sw-note"></small></td>
+            <td id="smc-sheetwt">–</td>
+          </tr>
+          <tr>
+            <td>Sheet price</td>
+            <td id="smc-sheetprice">–</td>
+          </tr>
+          <tr>
+            <td>Material used<small id="smc-bought-note"></small></td>
+            <td id="smc-bought">–</td>
+          </tr>
+          <tr class="smc-credit" id="smc-credit-row">
+            <td>Scrap credit<small id="smc-scrap-note"></small></td>
+            <td id="smc-credit">–</td>
+          </tr>
+          <tr id="smc-min-row">
+            <td>Minimum charge applied<small id="smc-min-note"></small></td>
+            <td id="smc-min">–</td>
+          </tr>
+          <tr class="smc-total">
+            <td>Net material cost</td>
+            <td id="smc-net">–</td>
+          </tr>
+          <tr class="smc-sell" id="smc-sell-row">
+            <td>Material on the quote<small id="smc-sell-note"></small></td>
+            <td id="smc-sell">–</td>
+          </tr>
+        </table>
+        <div class="smc-sec smc-breaks">
+          <p>Per-part material at quantity breaks</p>
+          <table id="smc-breaks"></table>
+          <div class="smc-breaks-note" id="smc-breaks-foot"></div>
+        </div>
+        <div class="smc-sec smc-methods">
+          <p>Same job, three ways to cost it (at this quantity)</p>
+          <table>
+            <tr data-m="yield">
+              <td>Share of sheet at this yield</td>
+              <td id="smc-m-yield">–</td>
+            </tr>
+            <tr data-m="full">
+              <td>Full sheets purchased</td>
+              <td id="smc-m-full">–</td>
+            </tr>
+            <tr data-m="net">
+              <td>Net footprint only</td>
+              <td id="smc-m-net">–</td>
+            </tr>
+          </table>
+        </div>
+        <div class="smc-warn" id="smc-warn"></div>
+        <div class="smc-actions">
+          <button type="button" class="smc-btn" id="smc-addpart">Add to parts list</button>
+          <button type="button" class="smc-btn" id="smc-copy">Copy summary</button>
+          <input type="email" id="smc-email" placeholder="you@shop.com" aria-label="Your email">
+          <button type="button" class="smc-btn primary" id="smc-send">Email me this estimate</button>
+        </div>
+        <div class="smc-note" id="smc-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= Batch: CSV parts list and PDF drawings ================= -->
+  <div class="smc-batch">
+    <div class="smc-batch-head">
+      <div>
+        <h3>Parts list</h3>
+        <p>Drop a CSV of parts or PDF drawings. Each row is costed with the pricing settings above and your default $/lb
+          per alloy. Edit anything by loading a row back into the form.</p>
+      </div>
+      <div class="smc-toolbar">
+        <button type="button" class="smc-btn small" id="smc-template">Download CSV template</button>
+        <button type="button" class="smc-btn small" id="smc-export" disabled>Export costed CSV</button>
+        <button type="button" class="smc-btn small" id="smc-clear" disabled>Clear list</button>
+      </div>
+    </div>
+    <div class="smc-drop" id="smc-drop">
+      <b>Drop CSV or PDF drawings here</b> — or <label for="smc-file">choose files</label><input type="file"
+        id="smc-file" multiple accept=".csv,.txt,.pdf,text/csv,application/pdf">
+      <div style="font-size:12.5px;margin-top:4px">CSV columns: part, material, thickness, length, width, qty, and
+        optionally units, finished_area, sheet, process, parts_per_sheet. PDFs are read from the title block.</div>
+    </div>
+    <div class="smc-tablewrap" id="smc-tablewrap">
+      <div class="smc-empty" id="smc-empty">No parts yet. Add the part above, or drop a file.</div>
+    </div>
+    <ul class="smc-issues" id="smc-issues"></ul>
+    <div class="smc-drawings" id="smc-drawings"></div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    // ---------- Site owner configuration ----------
+    var SMC_CONFIG = {
+      currency: "$",
+      leadEndpoint: "", shopEmail: "quotes@yourshop.com",
+      minStripInches: 12, markupPct: 20, breaks: [1, 5, 10, 25, 50, 100],
+      // Optional: a server endpoint that accepts {filename, pdfBase64} and returns the JSON described in
+      // the spec ("AI drawing reader"). Leave empty to use regex reading of the PDF's text layer only.
+      aiReaderEndpoint: "",
+      pdfjs: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/",
+      prices: {
+        "Mild steel (CRS / HRS / HRPO)": { buy: 0.72, scrap: 0.06 },
+        "Galvanized G90 / Galvanneal": { buy: 0.92, scrap: 0.05 },
+        "Stainless 304 / 316": { buy: 2.10, scrap: 0.55 },
+        "Aluminum 5052-H32": { buy: 2.40, scrap: 0.60 },
+        "Aluminum 6061-T6": { buy: 2.65, scrap: 0.60 },
+        "Copper C110": { buy: 6.50, scrap: 3.50 },
+        "Brass C260": { buy: 5.50, scrap: 2.50 }
+      }
+    };
+
+    // ---------- Reference data ----------
+    var PLATE = [["3/16 in plate", 0.1875], ["1/4 in plate", 0.25], ["5/16 in plate", 0.3125], ["3/8 in plate", 0.375], ["1/2 in plate", 0.5]];
+    function ga(list) { return list.map(function (x) { return [x[0] + " ga", x[1], x[2] || null, x[0]]; }); }
+    function dec(list) { return list.map(function (t) { return [t.toFixed(3).replace(/^0/, "") + " in", t, null, null]; }); }
+    var MATERIALS = {
+      "Mild steel (CRS / HRS / HRPO)": {
+        density: 0.2836, def: "16 ga", sheet: "48 × 120", keys: ["crs", "hrs", "hrpo", "mild", "carbon", "a36", "1008", "1010", "1018", "cold rolled", "hot rolled", "steel", "p&o", "pickled"],
+        thk: ga([[28, 0.0149], [26, 0.0179], [24, 0.0239], [22, 0.0299], [20, 0.0359], [18, 0.0478], [16, 0.0598], [14, 0.0747], [13, 0.0897], [12, 0.1046], [11, 0.1196], [10, 0.1345], [8, 0.1644], [7, 0.1793]]).concat(PLATE.map(function (p) { return [p[0], p[1], null, null]; }))
+      },
+      "Galvanized G90 / Galvanneal": {
+        density: 0.2833, def: "16 ga", sheet: "48 × 120", keys: ["galv", "g90", "g60", "g30", "galvanneal", "a60", "hdg", "hot dip", "zinc coated", "electrogalv", "ezc"],
+        thk: ga([[26, 0.0217, 0.906], [24, 0.0276, 1.156], [22, 0.0336, 1.406], [20, 0.0396, 1.656], [18, 0.0516, 2.156], [16, 0.0598, 2.656], [14, 0.0785, 3.281], [13, 0.0934, 3.906], [12, 0.1084, 4.531], [11, 0.1233, 5.156], [10, 0.1382, 5.781]])
+      },
+      "Stainless 304 / 316": {
+        density: 0.2860, def: "16 ga", sheet: "48 × 120", keys: ["stainless", "304", "316", "ss ", "sst", "sstl", "st stl", "cres", "#4", "2b", "301", "430"],
+        thk: ga([[30, 0.012], [28, 0.016], [26, 0.018], [24, 0.024], [22, 0.030], [20, 0.035], [18, 0.048], [16, 0.060], [14, 0.075], [13, 0.090], [12, 0.105], [11, 0.120], [10, 0.135], [7, 0.187]]).concat([["1/4 in plate", 0.25, null, null]])
+      },
+      "Aluminum 5052-H32": {
+        density: 0.0968, def: ".063 in", sheet: "48 × 144", keys: ["5052", "3003", "aluminum", "aluminium", "alum", "al "],
+        thk: dec([0.020, 0.025, 0.032, 0.040, 0.050, 0.063, 0.080, 0.090, 0.100, 0.125, 0.160, 0.190, 0.250])
+      },
+      "Aluminum 6061-T6": {
+        density: 0.0975, def: ".125 in", sheet: "48 × 144", keys: ["6061", "6063", "7075", "2024"],
+        thk: dec([0.032, 0.040, 0.050, 0.063, 0.080, 0.090, 0.100, 0.125, 0.190, 0.250, 0.375, 0.500])
+      },
+      "Copper C110": { density: 0.3230, def: ".032 in", sheet: "36 × 96", keys: ["copper", "c110", "cu "], thk: dec([0.021, 0.032, 0.040, 0.062, 0.093, 0.125]) },
+      "Brass C260": { density: 0.3070, def: ".032 in", sheet: "36 × 96", keys: ["brass", "c260", "c360"], thk: dec([0.020, 0.032, 0.040, 0.062, 0.093, 0.125]) }
+    };
+    var MAT_NAMES = Object.keys(MATERIALS);
+    var SHEETS = [["36 × 96", 96, 36], ["36 × 120", 120, 36], ["48 × 96", 96, 48], ["48 × 120", 120, 48], ["48 × 144", 144, 48], ["60 × 120", 120, 60], ["60 × 144", 144, 60], ["72 × 144", 144, 72], ["Custom", 0, 0]];
+    var PROCESSES = [["Laser", 0.375, 1.0], ["Turret punch", 0.75, 2.0], ["Waterjet", 0.5, 1.0], ["Plasma", 0.75, 1.0], ["Shear only", 0.0, 0.0]];
+
+    // ---------- Resolvers (shared by CSV and PDF intake) ----------
+    function num(x, d) { var v = parseFloat(x); return isFinite(v) ? v : (d || 0); }
+    function resolveMaterial(s) {
+      if (!s) return null; var t = (" " + String(s).toLowerCase() + " ");
+      for (var i = 0; i < MAT_NAMES.length; i++) if (t.indexOf(MAT_NAMES[i].toLowerCase()) >= 0) return MAT_NAMES[i];
+      // specific alloy keys first, generic words last
+      var order = ["Aluminum 6061-T6", "Galvanized G90 / Galvanneal", "Stainless 304 / 316", "Copper C110", "Brass C260", "Aluminum 5052-H32", "Mild steel (CRS / HRS / HRPO)"];
+      function hit(key) { key = key.trim(); return /^[\w ]+$/.test(key) ? new RegExp("\\b" + key.replace(/ /g, "\\s+") + "\\b").test(t) : t.indexOf(key) >= 0; }
+      for (var o = 0; o < order.length; o++) { var ks = MATERIALS[order[o]].keys; for (var k = 0; k < ks.length; k++) if (hit(ks[k])) return order[o]; }
+      return null;
+    }
+    function parseThicknessValue(s) {
+      // returns {gauge:n} or {thk:x} or null
+      if (s == null || s === "") return null; var t = String(s).toLowerCase().trim();
+      var g = t.match(/(\d{1,2})\s*(?:ga\b|gauge|g\b)/); if (g) return { gauge: parseInt(g[1], 10) };
+      var fr = t.match(/(\d)\s*\/\s*(\d{1,2})/); if (fr) return { thk: parseInt(fr[1], 10) / parseInt(fr[2], 10) };
+      var mm = t.match(/(\d*\.?\d+)\s*mm/); if (mm) return { thk: parseFloat(mm[1]) / 25.4 };
+      var d = t.match(/(\d*\.\d+|\d+)/); if (d) { var v = parseFloat(d[1]); if (v > 0 && v < 1) return { thk: v }; if (v >= 1 && v <= 30 && Number.isInteger(v) && t.length <= 3) return { gauge: v }; if (v >= 1) return { thk: v / 25.4 }; }
+      return null;
+    }
+    function resolveThickness(mat, s) {
+      var m = MATERIALS[mat], p = parseThicknessValue(s), best = null;
+      if (!p) return { idx: m.thk.findIndex(function (t) { return t[0] === m.def; }), guessed: true };
+      if (p.gauge != null) { var i = m.thk.findIndex(function (t) { return t[3] === p.gauge; }); if (i >= 0) return { idx: i, guessed: false }; }
+      var target = p.thk != null ? p.thk : null;
+      if (target == null && p.gauge != null) { // gauge not in this material's list — use steel gauge as decimal
+        var st = MATERIALS[MAT_NAMES[0]].thk.find(function (t) { return t[3] === p.gauge; }); target = st ? st[1] : null;
+      }
+      if (target == null) return { idx: m.thk.findIndex(function (t) { return t[0] === m.def; }), guessed: true };
+      m.thk.forEach(function (t, i) { var e = Math.abs(t[1] - target) / target; if (best == null || e < best.e) best = { i: i, e: e }; });
+      if (best && best.e <= 0.06) return { idx: best.i, guessed: false };
+      return { idx: -1, custom: target, guessed: false };
+    }
+    function resolveSheet(s, mat) {
+      if (s) { var mm = String(s).match(/(\d+(?:\.\d+)?)\s*[x×X*]\s*(\d+(?:\.\d+)?)/); if (mm) { var a = parseFloat(mm[1]), b = parseFloat(mm[2]); return [Math.max(a, b), Math.min(a, b), false]; } }
+      var d = SHEETS.find(function (x) { return x[0] === MATERIALS[mat].sheet; }); return [d[1], d[2], true];
+    }
+    function resolveProcess(s) { if (!s) return 0; var t = String(s).toLowerCase(); for (var i = 0; i < PROCESSES.length; i++) if (t.indexOf(PROCESSES[i][0].toLowerCase().split(" ")[0]) >= 0) return i; if (t.indexOf("punch") >= 0 || t.indexOf("turret") >= 0) return 1; return 0; }
+
+    // ---------- Core math ----------
+    function nest(pl, pw, sl, sw, gap, clamp, edge, allowRot) {
+      var usableL = sl - 2 * edge, usableW = sw - clamp - edge;
+      function fit(a, b) {
+        if (a + gap <= 0 || b + gap <= 0) return { n: 0, across: 0, down: 0 };
+        var across = Math.max(0, Math.floor((usableL + gap * 0.999) / (a + gap))), down = Math.max(0, Math.floor((usableW + gap * 0.999) / (b + gap)));
+        if (across * (a + gap) > usableL + gap) across--; if (down * (b + gap) > usableW + gap) down--;
+        across = Math.max(0, across); down = Math.max(0, down);
+        return { n: across * down, across: across, down: down };
+      }
+      var a = fit(pl, pw); a.rot = false; if (!allowRot) return a;
+      var b = fit(pw, pl); b.rot = true; return b.n > a.n ? b : a;
+    }
+    function costAt(qty, c) {
+      var sheets = c.pps > 0 ? Math.ceil(qty / c.pps) : 0;
+      var full = c.pps > 0 ? (sheets * c.sheetPrice - Math.max(0, sheets * c.sheetWt - qty * c.partWt) * c.scrapPrice) / qty : 0;
+      var yieldPer = c.pps > 0 ? c.sheetPrice / c.pps - Math.max(0, c.sheetWt / c.pps - c.partWt) * c.scrapPrice : 0;
+      var netPer = c.footprintWt * c.pricePerLb - Math.max(0, c.footprintWt - c.partWt) * c.scrapPrice;
+      var minPer = c.minCharge / qty;
+      var r = { sheets: sheets, full: full, yield: Math.max(yieldPer, minPer), net: Math.max(netPer, minPer), yieldRaw: yieldPer, netRaw: netPer, minPer: minPer };
+      r.minHit = { full: false, yield: minPer > yieldPer && c.pps > 0, net: minPer > netPer }; return r;
+    }
+    // p: {mat, thk, lbsqft, pl, pw, areaIn, qty, sl, sw, procIdx, gap, clamp, edge, rot, override, pricePerLb|sheetPrice}
+    // s: {method, minStrip, markup, scrapPrice}
+    function computePart(p, s) {
+      var n = nest(p.pl, p.pw, p.sl, p.sw, p.gap, p.clamp, p.edge, p.rot), pps = p.override || n.n;
+      var sheetArea = p.sl * p.sw, sheetWt = sheetArea / 144 * p.lbsqft, partWt = p.areaIn / 144 * p.lbsqft, footprintWt = (p.pl + p.gap) * (p.pw + p.gap) / 144 * p.lbsqft;
+      var sheetPrice = p.sheetPrice != null ? p.sheetPrice : sheetWt * p.pricePerLb, pricePerLb = sheetWt > 0 ? sheetPrice / sheetWt : 0;
+      var minCharge = p.sl > 0 ? sheetPrice * Math.min(s.minStrip, p.sl) / p.sl : 0;
+      var c = { pps: pps, sheetPrice: sheetPrice, sheetWt: sheetWt, partWt: partWt, footprintWt: footprintWt, pricePerLb: pricePerLb, scrapPrice: s.scrapPrice, minCharge: minCharge };
+      var r = costAt(p.qty, c);
+      return {
+        n: n, pps: pps, sheetWt: sheetWt, partWt: partWt, footprintWt: footprintWt, sheetPrice: sheetPrice, pricePerLb: pricePerLb, minCharge: minCharge, c: c, r: r,
+        per: r[s.method], total: r[s.method] * p.qty, quote: r[s.method] * (1 + s.markup), yieldPct: pps > 0 && sheetArea > 0 ? pps * p.areaIn / sheetArea : 0, minHit: r.minHit[s.method]
+      };
+    }
+
+    // ---------- DOM ----------
+    var $ = function (id) { return document.getElementById(id); };
+    var el = {};
+    ["mat", "gauge", "thk", "lbsqft", "dens", "u-in", "u-mm", "pl", "pw", "qty", "pn", "area", "proc", "gap", "clamp", "sheet", "sl", "sw", "edge", "pps", "rot",
+      "basis-lb", "basis-sheet", "price", "price-label", "method", "minstrip", "markup", "scrap", "scrapon",
+      "svg", "cap-pps", "cap-yield", "cap-orient", "cap-sheets", "perpart", "total", "qty-echo", "method-echo",
+      "partwt", "pw-note", "sheetwt", "sw-note", "sheetprice", "bought", "bought-note", "credit-row", "credit", "scrap-note", "min-row", "min", "min-note", "net", "sell-row", "sell", "sell-note",
+      "breaks", "breaks-foot", "m-full", "m-yield", "m-net", "warn", "addpart", "copy", "email", "send", "note",
+      "template", "export", "clear", "drop", "file", "tablewrap", "empty", "issues", "drawings"].forEach(function (k) { el[k.replace(/-([a-z])/g, function (m, c) { return c.toUpperCase(); })] = $("smc-" + k); });
+    var state = { basis: "lb", units: "in", lastSummary: "", last: null, lock: false, parts: [], issues: [], drawings: [] };
+    var cur = SMC_CONFIG.currency;
+    function money(v) { return cur + (isFinite(v) ? v : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function lb(v) { return (isFinite(v) ? v : 0).toLocaleString(undefined, { maximumFractionDigits: 2 }) + " lb"; }
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+    // ---------- Form setup ----------
+    function opt(sel, value, text, selected) { var o = document.createElement("option"); o.value = value; o.textContent = text; if (selected) o.selected = true; sel.appendChild(o); }
+    function fillMaterials() { MAT_NAMES.forEach(function (n) { opt(el.mat, n, n); }); }
+    function fillThickness(keepIdx) {
+      var m = MATERIALS[el.mat.value]; el.gauge.innerHTML = "";
+      m.thk.forEach(function (t, i) { opt(el.gauge, String(i), t[0] + "  (" + t[1].toFixed(4) + " in)", keepIdx != null ? i === keepIdx : t[0] === m.def); });
+      opt(el.gauge, "custom", "Custom thickness", keepIdx === -1);
+      el.dens.value = m.density.toFixed(4); applyThickness();
+      var p = SMC_CONFIG.prices[el.mat.value] || { buy: 1, scrap: 0.1 };
+      if (state.basis === "lb") el.price.value = p.buy.toFixed(2);
+      el.scrap.value = p.scrap.toFixed(2);
+      if (keepIdx == null) { el.sheet.value = m.sheet; applySheet(); }
+    }
+    function applyThickness() {
+      var m = MATERIALS[el.mat.value];
+      if (el.gauge.value === "custom") { el.thk.disabled = false; el.lbsqft.disabled = false; return; }
+      var t = m.thk[parseInt(el.gauge.value, 10)];
+      el.thk.value = t[1].toFixed(4); el.thk.disabled = true; el.lbsqft.value = (t[2] != null ? t[2] : t[1] * 144 * m.density).toFixed(3); el.lbsqft.disabled = false;
+    }
+    function fillSheets() { SHEETS.forEach(function (s) { opt(el.sheet, s[0], s[0] === "Custom" ? s[0] : s[0] + " in"); }); }
+    function applySheet() {
+      var s = SHEETS.filter(function (x) { return x[0] === el.sheet.value; })[0];
+      if (s[0] === "Custom") { el.sl.disabled = false; el.sw.disabled = false; } else { el.sl.value = s[1]; el.sw.value = s[2]; el.sl.disabled = true; el.sw.disabled = true; }
+    }
+    function fillProcesses() { PROCESSES.forEach(function (p, i) { opt(el.proc, String(i), p[0]); }); applyProcess(); }
+    function applyProcess() { var p = PROCESSES[parseInt(el.proc.value, 10)]; el.gap.value = p[1].toFixed(3); el.clamp.value = p[2].toFixed(2); }
+    function setBasis(b) {
+      state.basis = b; el.basisLb.setAttribute("aria-pressed", b === "lb"); el.basisSheet.setAttribute("aria-pressed", b === "sheet");
+      el.priceLabel.textContent = b === "lb" ? "Material $/lb" : "Price per sheet";
+      if (b === "lb") { var p = SMC_CONFIG.prices[el.mat.value]; el.price.value = p ? p.buy.toFixed(2) : "1.00"; } else if (state.last) { el.price.value = state.last.sheetPrice.toFixed(2); }
+      calc();
+    }
+    function setUnits(u) {
+      if (u === state.units) return; var f = u === "mm" ? 25.4 : 1 / 25.4;
+      ["pl", "pw"].forEach(function (k) { if (el[k].value !== "") el[k].value = (num(el[k].value) * f).toFixed(u === "mm" ? 1 : 3); });
+      if (el.area.value !== "") el.area.value = (num(el.area.value) * f * f).toFixed(u === "mm" ? 0 : 2);
+      state.units = u; el.uIn.setAttribute("aria-pressed", u === "in"); el.uMm.setAttribute("aria-pressed", u === "mm");
+      Array.prototype.forEach.call(document.querySelectorAll("#smc .smc-pu"), function (i) { i.textContent = u; });
+      Array.prototype.forEach.call(document.querySelectorAll("#smc .smc-pu2"), function (i) { i.textContent = u + "²"; });
+      calc();
+    }
+    function settings() { return { method: el.method.value, minStrip: num(el.minstrip.value), markup: num(el.markup.value) / 100, scrapOn: el.scrapon.checked, scrapPrice: el.scrapon.checked ? num(el.scrap.value) : 0, edge: num(el.edge.value), rot: el.rot.checked }; }
+
+    // ---------- Single-part calc ----------
+    function calc() {
+      if (state.lock) return;
+      var m = MATERIALS[el.mat.value], s = settings();
+      var thk = num(el.thk.value), dens = num(el.dens.value), lbsqft = num(el.lbsqft.value); if (!(lbsqft > 0)) lbsqft = thk * 144 * dens;
+      var toIn = state.units === "mm" ? 1 / 25.4 : 1;
+      var pl = num(el.pl.value) * toIn, pw = num(el.pw.value) * toIn, qty = Math.max(1, Math.round(num(el.qty.value, 1)));
+      var areaIn = num(el.area.value) > 0 ? num(el.area.value) * toIn * toIn : pl * pw;
+      var p = {
+        mat: el.mat.value, thk: thk, lbsqft: lbsqft, pl: pl, pw: pw, areaIn: areaIn, qty: qty, sl: num(el.sl.value), sw: num(el.sw.value), procIdx: parseInt(el.proc.value, 10),
+        gap: num(el.gap.value), clamp: num(el.clamp.value), edge: s.edge, rot: s.rot, override: num(el.pps.value) > 0 ? Math.round(num(el.pps.value)) : 0
+      };
+      if (state.basis === "lb") p.pricePerLb = num(el.price.value); else p.sheetPrice = num(el.price.value);
+      var o = computePart(p, s), n = o.n, r = o.r, mode = s.method, per = o.per, net = o.total, markup = s.markup;
+      var warn = [];
+      if (o.pps === 0) warn.push("The part does not fit on this sheet with the current spacing and clamp strip.");
+      if (areaIn > pl * pw + 1e-6) warn.push("Finished area is larger than the blank. Check the numbers.");
+      if (areaIn > 0 && areaIn < 0.25 * pl * pw) warn.push("Finished area is under 25% of the blank — most of the blank becomes scrap.");
+      el.warn.textContent = warn.join(" "); el.warn.className = "smc-warn" + (warn.length ? " show" : "");
+      var methodName = { yield: "share of sheet", full: "full sheets", net: "net footprint" }[mode];
+      el.capPps.textContent = o.pps > 0 ? o.pps + (p.override ? " (set)" : "") : "0"; el.capYield.textContent = (o.yieldPct * 100).toFixed(0) + "%";
+      el.capOrient.textContent = p.override ? "manual count" : (n.n ? n.across + " × " + n.down + (n.rot ? ", rotated" : "") : "no fit"); el.capSheets.textContent = r.sheets;
+      el.perpart.textContent = money(per); el.total.textContent = money(net); el.qtyEcho.textContent = qty.toLocaleString(); el.methodEcho.textContent = "(" + methodName + ")";
+      el.partwt.textContent = lb(o.partWt); el.pwNote.textContent = areaIn.toFixed(1) + " in² at " + lbsqft.toFixed(3) + " lb/ft²";
+      el.sheetwt.textContent = lb(o.sheetWt); el.swNote.textContent = p.sl + " × " + p.sw + " in";
+      el.sheetprice.textContent = money(o.sheetPrice) + (state.basis === "sheet" ? "  (" + money(o.pricePerLb) + "/lb)" : "");
+      var bought, boughtNote, scrapWt;
+      if (mode === "full") { bought = r.sheets * o.sheetPrice; boughtNote = r.sheets + " sheet" + (r.sheets === 1 ? "" : "s") + " × " + money(o.sheetPrice); scrapWt = Math.max(0, r.sheets * o.sheetWt - qty * o.partWt); }
+      else if (mode === "yield") { bought = o.pps > 0 ? qty * o.sheetPrice / o.pps : 0; boughtNote = "sheet price ÷ " + o.pps + " parts per sheet"; scrapWt = o.pps > 0 ? qty * Math.max(0, o.sheetWt / o.pps - o.partWt) : 0; }
+      else { bought = qty * o.footprintWt * o.pricePerLb; boughtNote = "blank + spacing at " + money(o.pricePerLb) + "/lb"; scrapWt = qty * Math.max(0, o.footprintWt - o.partWt); }
+      var credit = scrapWt * s.scrapPrice;
+      el.bought.textContent = money(bought); el.boughtNote.textContent = boughtNote;
+      el.creditRow.className = "smc-credit" + (s.scrapPrice > 0 ? "" : " hide"); el.credit.textContent = "− " + money(credit); el.scrapNote.textContent = lb(scrapWt) + " × " + money(s.scrapPrice) + "/lb";
+      el.minRow.className = o.minHit ? "" : "hide"; el.min.textContent = "+ " + money(net - (bought - credit)); el.minNote.textContent = money(o.minCharge) + " minimum (" + s.minStrip + " in strip) ÷ " + qty;
+      el.net.textContent = money(net);
+      el.sellRow.className = "smc-sell" + (markup > 0 ? "" : " hide"); el.sell.textContent = money(o.quote) + " / part"; el.sellNote.textContent = money(net * (1 + markup)) + " total at " + (markup * 100).toFixed(0) + "% markup";
+      var breaks = SMC_CONFIG.breaks.slice(); if (breaks.indexOf(qty) < 0) breaks.push(qty); breaks.sort(function (a, b) { return a - b; });
+      var h = "<tr><th>Qty</th><th>Sheets</th><th>Per part</th><th>Total</th></tr>", anyMin = false;
+      breaks.forEach(function (q) {
+        var rq = costAt(q, o.c), pq = rq[mode], hit = rq.minHit[mode]; if (hit) anyMin = true;
+        h += '<tr class="' + (q === qty ? "cur" : "") + (hit ? " min" : "") + '"><td>' + q.toLocaleString() + "</td><td>" + rq.sheets + "</td><td>" + money(pq) + "</td><td>" + money(pq * q) + "</td></tr>";
+      });
+      el.breaks.innerHTML = h; el.breaksFoot.textContent = anyMin ? "* minimum material charge of " + money(o.minCharge) + " applies" : "";
+      el.mYield.textContent = money(r.yield) + " / part"; el.mFull.textContent = money(r.full) + " / part"; el.mNet.textContent = money(r.net) + " / part";
+      Array.prototype.forEach.call(document.querySelectorAll("#smc .smc-methods tr"), function (tr) { tr.className = tr.getAttribute("data-m") === mode ? "on" : ""; });
+      drawNest(pl, pw, p.sl, p.sw, p.gap, p.clamp, p.edge, n, p.override);
+      state.last = { sheetPrice: o.sheetPrice, p: p, o: o };
+      var thkLabel = el.gauge.value === "custom" ? thk.toFixed(4) + " in" : m.thk[parseInt(el.gauge.value, 10)][0] + " (" + thk.toFixed(4) + " in)";
+      state.lastSummary = ["Sheet metal material estimate" + (el.pn.value ? " — " + el.pn.value : ""),
+      el.mat.value + ", " + thkLabel + ", " + lbsqft.toFixed(3) + " lb/ft²",
+      "Part " + pl.toFixed(3) + " × " + pw.toFixed(3) + " in, qty " + qty + (num(el.area.value) > 0 ? ", finished area " + areaIn.toFixed(1) + " in²" : ""),
+      PROCESSES[p.procIdx][0] + ": spacing " + p.gap + " in, clamp " + p.clamp + " in" + (p.edge ? ", edge trim " + p.edge + " in" : ""),
+      "Stock " + p.sl + " × " + p.sw + " in, " + o.pps + " parts per sheet (" + el.capOrient.textContent + "), " + (o.yieldPct * 100).toFixed(0) + "% yield, " + r.sheets + " sheets",
+      "Sheet price " + money(o.sheetPrice) + " (" + money(o.pricePerLb) + "/lb)" + (s.scrapPrice > 0 ? ", scrap credit " + money(s.scrapPrice) + "/lb" : "") + ", minimum charge " + money(o.minCharge),
+      "Material cost per part: " + money(per) + " (" + methodName + ")" + (o.minHit ? " — minimum charge applied" : ""),
+      "Total material: " + money(net) + (markup > 0 ? "; on quote at " + (markup * 100).toFixed(0) + "% markup: " + money(o.quote) + " / part" : ""),
+      "Breaks: " + breaks.map(function (q) { return q + " → " + money(costAt(q, o.c)[mode]); }).join(", "),
+      "Other methods at qty " + qty + ": share of sheet " + money(r.yield) + ", full sheets " + money(r.full) + ", net footprint " + money(r.net)].join("\n");
+    }
+    function drawNest(pl, pw, sl, sw, gap, clamp, edge, n, override) {
+      var W = 600, H = 300, pad = 14, scale = Math.min((W - 2 * pad) / sl, (H - 2 * pad) / sw);
+      if (!isFinite(scale) || scale <= 0) { el.svg.innerHTML = ""; return; }
+      var ox = (W - sl * scale) / 2, oy = (H - sw * scale) / 2, s = [];
+      s.push('<defs><pattern id="smc-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#8A9096" stroke-width="1"/></pattern></defs>');
+      s.push('<rect x="' + ox + '" y="' + oy + '" width="' + sl * scale + '" height="' + sw * scale + '" fill="#DCDFE2" stroke="#8A9096" stroke-width="1"/>');
+      if (clamp > 0) s.push('<rect x="' + ox + '" y="' + (oy + (sw - clamp) * scale) + '" width="' + sl * scale + '" height="' + clamp * scale + '" fill="url(#smc-hatch)" opacity=".7"/>');
+      if (n && n.n > 0 && !override) {
+        var a = n.rot ? pw : pl, b = n.rot ? pl : pw, count = 0;
+        for (var r = 0; r < n.down && count < 800; r++) for (var c = 0; c < n.across && count < 800; c++, count++) {
+          var x = ox + (edge + gap / 2 + c * (a + gap)) * scale, y = oy + (edge + gap / 2 + r * (b + gap)) * scale;
+          s.push('<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (a * scale).toFixed(1) + '" height="' + (b * scale).toFixed(1) + '" fill="#1F45A3" fill-opacity="0.85" stroke="#F4F5F3" stroke-width="0.8"/>');
+        }
+      }
+      s.push('<text x="' + (ox + 5) + '" y="' + (oy + 13) + '" font-size="11" fill="#6B7178">' + sl + ' × ' + sw + ' in</text>');
+      if (clamp > 0) s.push('<text x="' + (ox + sl * scale - 5) + '" y="' + (oy + sw * scale - 4) + '" font-size="10" fill="#6B7178" text-anchor="end">clamp ' + clamp + ' in</text>');
+      el.svg.innerHTML = s.join("");
+    }
+
+    // ---------- Parts list ----------
+    // part record: {pn, mat, thkIdx (-1 custom), thk, lbsqft, pl, pw, areaIn, qty, sl, sw, sheetDefault, procIdx, override, source, notes[]}
+    function makePart(raw) {
+      // raw: strings from CSV / PDF / form. returns {part, notes}
+      var notes = [], mat = resolveMaterial(raw.material);
+      if (!mat) { mat = MAT_NAMES[0]; notes.push("material not recognized" + (raw.material ? " (“" + raw.material + "”)" : "") + " — using mild steel"); }
+      var t = resolveThickness(mat, raw.thickness); if (t.guessed) notes.push("thickness missing — using " + MATERIALS[mat].def);
+      var m = MATERIALS[mat], thk, lbsqft, thkIdx = t.idx;
+      if (thkIdx >= 0) { thk = m.thk[thkIdx][1]; lbsqft = m.thk[thkIdx][2] != null ? m.thk[thkIdx][2] : thk * 144 * m.density; } else { thk = t.custom; lbsqft = thk * 144 * m.density; }
+      var units = (raw.units || "").toString().toLowerCase().indexOf("mm") >= 0 ? "mm" : "in", toIn = units === "mm" ? 1 / 25.4 : 1;
+      var pl = num(raw.length) * toIn, pw = num(raw.width) * toIn;
+      if (!(pl > 0 && pw > 0)) notes.push("flat size missing");
+      if (pl < pw) { var tmp = pl; pl = pw; pw = tmp; }
+      var qty = Math.max(1, Math.round(num(raw.qty, 1))); if (!(num(raw.qty) > 0)) notes.push("qty missing — using 1");
+      var areaIn = num(raw.finished_area) > 0 ? num(raw.finished_area) * toIn * toIn : pl * pw;
+      var sh = resolveSheet(raw.sheet, mat);
+      return {
+        part: {
+          pn: (raw.part || "").toString().trim(), mat: mat, thkIdx: thkIdx, thk: thk, lbsqft: lbsqft, pl: pl, pw: pw, areaIn: areaIn, qty: qty, sl: sh[0], sw: sh[1], sheetDefault: sh[2],
+          procIdx: resolveProcess(raw.process), override: num(raw.parts_per_sheet) > 0 ? Math.round(num(raw.parts_per_sheet)) : 0, source: raw.source || "csv", notes: notes
+        }, notes: notes
+      };
+    }
+    function partFromForm() {
+      var p = state.last.p, thkIdx = el.gauge.value === "custom" ? -1 : parseInt(el.gauge.value, 10);
+      return {
+        pn: el.pn.value.trim(), mat: p.mat, thkIdx: thkIdx, thk: p.thk, lbsqft: p.lbsqft, pl: p.pl, pw: p.pw, areaIn: p.areaIn, qty: p.qty, sl: p.sl, sw: p.sw, sheetDefault: false, procIdx: p.procIdx, override: p.override, source: "form", notes: [],
+        pricePerLb: state.basis === "lb" ? num(el.price.value) : null, sheetPrice: state.basis === "sheet" ? num(el.price.value) : null
+      };
+    }
+    function costPart(part) {
+      var s = settings(), pr = PROCESSES[part.procIdx] || PROCESSES[0], cfg = SMC_CONFIG.prices[part.mat] || { buy: 1 };
+      var p = { mat: part.mat, thk: part.thk, lbsqft: part.lbsqft, pl: part.pl, pw: part.pw, areaIn: part.areaIn, qty: part.qty, sl: part.sl, sw: part.sw, procIdx: part.procIdx, gap: pr[1], clamp: pr[2], edge: s.edge, rot: s.rot, override: part.override };
+      if (part.sheetPrice != null) p.sheetPrice = part.sheetPrice; else p.pricePerLb = part.pricePerLb != null ? part.pricePerLb : cfg.buy;
+      return computePart(p, s);
+    }
+    function renderParts() {
+      var parts = state.parts; el.export.disabled = el.clear.disabled = parts.length === 0;
+      if (!parts.length) { el.tablewrap.innerHTML = '<div class="smc-empty">No parts yet. Add the part above, or drop a file.</div>'; el.issues.innerHTML = ""; return; }
+      var s = settings(), rows = "", sumTotal = 0, sumQuote = 0, sumSheets = 0, sumQty = 0;
+      parts.forEach(function (part, i) {
+        var o = costPart(part), m = MATERIALS[part.mat], thkLabel = part.thkIdx >= 0 ? m.thk[part.thkIdx][0] : part.thk.toFixed(4) + " in";
+        sumTotal += o.total; sumQuote += o.quote * part.qty; sumSheets += o.r.sheets; sumQty += part.qty;
+        rows += '<tr class="' + (part.notes.length ? "smc-issue" : "") + '" data-i="' + i + '"><td class="smc-part">' + esc(part.pn || "—") + '<small>' + esc(part.source) + (part.notes.length ? " · " + esc(part.notes.join("; ")) : "") + '</small></td>' +
+          '<td>' + esc(part.mat.split(" (")[0]) + '</td><td>' + esc(thkLabel) + '</td><td>' + part.pl.toFixed(2) + ' × ' + part.pw.toFixed(2) + '<small>' + esc(PROCESSES[part.procIdx][0]) + '</small></td>' +
+          '<td>' + part.qty.toLocaleString() + '</td><td>' + part.sl + ' × ' + part.sw + (part.sheetDefault ? '<small>default</small>' : '') + '</td><td>' + o.pps + '<small>' + (o.pps ? (o.n.across + "×" + o.n.down + (o.n.rot ? " r" : "")) : "no fit") + '</small></td>' +
+          '<td>' + (o.yieldPct * 100).toFixed(0) + '%</td><td>' + o.r.sheets + '</td><td>' + money(o.per) + (o.minHit ? '<small>min charge</small>' : '') + '</td><td>' + money(o.total) + '</td><td>' + money(o.quote) + '</td>' +
+          '<td class="smc-rowact"><button type="button" data-act="load" title="Load into the form">↑ edit</button><button type="button" data-act="del" title="Remove">✕</button></td></tr>';
+      });
+      el.tablewrap.innerHTML = '<table class="smc-parts"><thead><tr><th>Part</th><th>Material</th><th>Thk</th><th>Flat L × W (in)</th><th>Qty</th><th>Stock</th><th>Per sheet</th><th>Yield</th><th>Sheets</th><th>$/part</th><th>Material</th><th>Quote $/part</th><th></th></tr></thead><tbody>' + rows +
+        '</tbody><tfoot><tr><td>' + parts.length + ' part' + (parts.length === 1 ? "" : "s") + '</td><td colspan="3"></td><td>' + sumQty.toLocaleString() + '</td><td></td><td></td><td></td><td>' + sumSheets + '</td><td></td><td>' + money(sumTotal) + '</td><td>' + money(sumQuote / Math.max(1, sumQty)) + '<small>' + money(sumQuote) + ' total</small></td><td></td></tr></tfoot></table>';
+      el.issues.innerHTML = state.issues.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("");
+    }
+    el.tablewrap.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-act]"); if (!b) return; var tr = b.closest("tr"), i = parseInt(tr.getAttribute("data-i"), 10), part = state.parts[i];
+      if (b.getAttribute("data-act") === "del") { state.parts.splice(i, 1); renderParts(); return; }
+      loadIntoForm(part);
+    });
+    function loadIntoForm(part) {
+      state.lock = true;
+      el.mat.value = part.mat; fillThickness(part.thkIdx);
+      if (part.thkIdx < 0) { el.thk.value = part.thk.toFixed(4); el.lbsqft.value = part.lbsqft.toFixed(3); } else el.lbsqft.value = part.lbsqft.toFixed(3);
+      setUnitsSilent("in"); el.pl.value = part.pl.toFixed(3); el.pw.value = part.pw.toFixed(3); el.qty.value = part.qty; el.pn.value = part.pn;
+      el.area.value = Math.abs(part.areaIn - part.pl * part.pw) > 1e-6 ? part.areaIn.toFixed(2) : "";
+      var sh = SHEETS.find(function (x) { return x[1] === part.sl && x[2] === part.sw; }); el.sheet.value = sh ? sh[0] : "Custom"; applySheet(); if (!sh) { el.sl.value = part.sl; el.sw.value = part.sw; }
+      el.proc.value = String(part.procIdx); applyProcess(); el.pps.value = part.override || "";
+      if (part.sheetPrice != null) { state.basis = "sheet"; el.price.value = part.sheetPrice.toFixed(2); } else { state.basis = "lb"; el.price.value = (part.pricePerLb != null ? part.pricePerLb : (SMC_CONFIG.prices[part.mat] || { buy: 1 }).buy).toFixed(2); }
+      el.basisLb.setAttribute("aria-pressed", state.basis === "lb"); el.basisSheet.setAttribute("aria-pressed", state.basis === "sheet"); el.priceLabel.textContent = state.basis === "lb" ? "Material $/lb" : "Price per sheet";
+      state.lock = false; calc(); if (el.svg.scrollIntoView) el.svg.scrollIntoView({ behavior: "smooth", block: "start" }); setNote("Loaded " + (part.pn || "part") + " into the form. Edit, then “Add to parts list” to add it as a new row.");
+    }
+    function setUnitsSilent(u) { if (u === state.units) return; state.units = u; el.uIn.setAttribute("aria-pressed", u === "in"); el.uMm.setAttribute("aria-pressed", u === "mm"); Array.prototype.forEach.call(document.querySelectorAll("#smc .smc-pu"), function (i) { i.textContent = u; }); Array.prototype.forEach.call(document.querySelectorAll("#smc .smc-pu2"), function (i) { i.textContent = u + "²"; }); }
+    el.addpart.addEventListener("click", function () { state.parts.push(partFromForm()); renderParts(); if (el.tablewrap.scrollIntoView) el.tablewrap.scrollIntoView({ behavior: "smooth", block: "nearest" }); });
+    el.clear.addEventListener("click", function () { state.parts = []; state.issues = []; renderParts(); });
+
+    // ---------- CSV ----------
+    function parseCSV(text) {
+      var rows = [], row = [], cell = "", q = false, i, c;
+      text = text.replace(/^\uFEFF/, "");
+      for (i = 0; i < text.length; i++) {
+        c = text[i];
+        if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+        else if (c === '"') q = true; else if (c === "," || c === ";" || c === "\t") { row.push(cell); cell = ""; }
+        else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+        else cell += c;
+      }
+      if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+      return rows.filter(function (r) { return r.some(function (x) { return x.trim() !== ""; }); });
+    }
+    var HEADERS = {
+      part: ["part", "part_number", "partnumber", "part no", "part#", "pn", "p/n", "name", "item", "drawing", "dwg"], material: ["material", "mat", "alloy", "matl", "mtl"], thickness: ["thickness", "thk", "gauge", "ga", "gage", "thick"],
+      length: ["length", "len", "l", "flat_length", "flat length", "blank_length", "x"], width: ["width", "wid", "w", "flat_width", "flat width", "blank_width", "y"], qty: ["qty", "quantity", "q", "pcs", "pieces", "count"],
+      units: ["units", "unit", "uom"], finished_area: ["finished_area", "area", "net_area", "finished area"], sheet: ["sheet", "stock", "sheet_size", "stock_sheet", "sheet size"], process: ["process", "proc", "machine", "cut"], parts_per_sheet: ["parts_per_sheet", "pps", "override", "per_sheet", "nest"]
+    };
+    function mapHeaders(hdr) {
+      var map = {}; hdr.forEach(function (h, i) {
+        var k = h.trim().toLowerCase().replace(/[\s\-]+/g, "_").replace(/[()"']/g, "").replace(/_?\(?(in|mm|inches)\)?$/, "");
+        Object.keys(HEADERS).forEach(function (field) { if (map[field] != null) return; if (HEADERS[field].indexOf(k) >= 0 || HEADERS[field].indexOf(h.trim().toLowerCase()) >= 0) map[field] = i; });
+      });
+      return map;
+    }
+    function importCSV(text, filename) {
+      var rows = parseCSV(text); if (rows.length < 2) { state.issues.push(filename + ": no data rows found."); renderParts(); return; }
+      var map = mapHeaders(rows[0]), missing = ["length", "width"].filter(function (f) { return map[f] == null; });
+      if (missing.length) { state.issues.push(filename + ": couldn't find column(s) " + missing.join(", ") + ". Headers seen: " + rows[0].join(", ")); renderParts(); return; }
+      var added = 0, unitsHdr = rows[0].some(function (h) { return /mm/i.test(h); }) ? "mm" : "";
+      rows.slice(1).forEach(function (r, idx) {
+        var raw = { source: filename }; Object.keys(map).forEach(function (f) { raw[f] = r[map[f]]; }); if (!raw.units && unitsHdr) raw.units = unitsHdr;
+        var mp = makePart(raw); if (!(mp.part.pl > 0 && mp.part.pw > 0)) { state.issues.push(filename + " row " + (idx + 2) + ": skipped, no flat size."); return; }
+        state.parts.push(mp.part); added++;
+      });
+      if (!added) state.issues.push(filename + ": no usable rows."); renderParts();
+    }
+    el.template.addEventListener("click", function () {
+      download("parts-template.csv", "part,material,thickness,length,width,qty,units,finished_area,sheet,process,parts_per_sheet\n210338-001,CRS,16 ga,13.38,7.86,50,in,,48x120,laser,\nBRK-104,5052-H32,.063,8.5,4.25,200,in,,48x144,laser,\nCOVER-7,304 SS,14 ga,320,180,25,mm,,,punch,\n");
+    });
+    el.export.addEventListener("click", function () {
+      var s = settings(), lines = ["part,material,thickness_in,lb_per_sqft,flat_length_in,flat_width_in,qty,finished_area_in2,stock_sheet,process,parts_per_sheet,nest,yield_pct,sheets,price_per_lb,sheet_price,min_charge,method,material_cost_per_part,material_total,markup_pct,quote_material_per_part,quote_material_total,notes"];
+      state.parts.forEach(function (part) {
+        var o = costPart(part);
+        lines.push([q(part.pn), q(part.mat), part.thk.toFixed(4), part.lbsqft.toFixed(3), part.pl.toFixed(3), part.pw.toFixed(3), part.qty, part.areaIn.toFixed(2), part.sl + "x" + part.sw, PROCESSES[part.procIdx][0], o.pps, o.pps ? o.n.across + "x" + o.n.down + (o.n.rot ? " rotated" : "") : "no fit",
+        (o.yieldPct * 100).toFixed(1), o.r.sheets, o.pricePerLb.toFixed(3), o.sheetPrice.toFixed(2), o.minCharge.toFixed(2), s.method, o.per.toFixed(4), o.total.toFixed(2), (s.markup * 100).toFixed(0), o.quote.toFixed(4), (o.quote * part.qty).toFixed(2), q(part.notes.join("; "))].join(","));
+      });
+      download("costed-parts.csv", lines.join("\n"));
+      function q(v) { v = String(v == null ? "" : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+    });
+    function download(name, text) { var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+
+    // ---------- Files: drop zone ----------
+    function handleFiles(files) {
+      Array.prototype.forEach.call(files, function (f) {
+        var name = f.name || "file";
+        if (/\.pdf$/i.test(name) || f.type === "application/pdf") readDrawing(f);
+        else { var rd = new FileReader(); rd.onload = function () { importCSV(String(rd.result), name); }; rd.readAsText(f); }
+      });
+    }
+    el.file.addEventListener("change", function () { handleFiles(el.file.files); el.file.value = ""; });
+    ["dragenter", "dragover"].forEach(function (ev) { el.drop.addEventListener(ev, function (e) { e.preventDefault(); el.drop.classList.add("over"); }); });
+    ["dragleave", "drop"].forEach(function (ev) { el.drop.addEventListener(ev, function (e) { e.preventDefault(); el.drop.classList.remove("over"); }); });
+    el.drop.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files); });
+
+    // ---------- PDF drawings ----------
+    // Reads the title block from the PDF text layer. Scanned drawings have no text layer; use the AI reader for those.
+    var pdfjsReady = null;
+    function loadPdfjs() {
+      if (pdfjsReady) return pdfjsReady;
+      pdfjsReady = new Promise(function (res, rej) {
+        if (window.pdfjsLib) return res(window.pdfjsLib);
+        var sc = document.createElement("script"); sc.src = SMC_CONFIG.pdfjs + "pdf.min.js";
+        sc.onload = function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = SMC_CONFIG.pdfjs + "pdf.worker.min.js"; res(window.pdfjsLib); };
+        sc.onerror = function () { rej(new Error("pdf.js failed to load")); }; document.head.appendChild(sc);
+      }); return pdfjsReady;
+    }
+    function parseDrawingText(text) {
+      // Returns fields with a confidence tag each: found | guess | missing
+      var T = text.replace(/\s+/g, " "), U = T.toUpperCase(), f = {};
+      function put(k, v, tag) { if (v != null && v !== "" && (!f[k] || f[k].tag !== "found")) f[k] = { v: v, tag: tag }; }
+      var m;
+      // part number and revision
+      if ((m = U.match(/(?:PART\s*(?:NO|NUMBER|#)\.?|P\/N|DRAWING\s*(?:NO|NUMBER)\.?|DWG\.?\s*(?:NO|#)\.?|DRAWING\s*#)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9\-_.\/]{2,})/))) put("part", m[1].replace(/[.,;]$/, ""), "found");
+      if ((m = U.match(/\bREV(?:ISION)?\.?\s*[:.\-]?\s*([A-Z0-9]{1,3})\b/))) put("rev", m[1], "found");
+      // material block: text after MATERIAL label, or alloy words anywhere
+      var matText = null;
+      if ((m = T.match(/MAT(?:ERIA)?L\.?\s*[:.\-]?\s*([^\n]{2,80})/i))) matText = m[1];
+      var matFrom = resolveMaterial(matText); if (matFrom) put("material", matFrom, "found");
+      else { var any = resolveMaterial(T); if (any) put("material", any, "guess"); }
+      // thickness: "16 GA", ".063 THK", "THICKNESS .060", "0.0598", "1/4 PLATE", "1.5 mm"
+      var thkSrc = (matText || "") + " " + T;
+      if ((m = thkSrc.match(/(\d{1,2})\s*(?:GA\b|GAUGE|GAGE)/i))) put("thickness", m[1] + " ga", matText && matText.match(/\d{1,2}\s*GA/i) ? "found" : "guess");
+      if ((m = thkSrc.match(/(?:THK|THICK(?:NESS)?|MATERIAL\s*THICKNESS)\s*[:.\-=]?\s*(\d*\.\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?\s*MM)/i))) put("thickness", m[1], "found");
+      if (!f.thickness && (m = thkSrc.match(/(\d*\.\d{2,4}|\d+(?:\.\d+)?\s*MM|\d\s*\/\s*\d{1,2})\s*(?:"|IN\b)?\s*(?:THK|THICK\b|THICKNESS)/i))) put("thickness", m[1], "found");
+      if (!f.thickness && (m = thkSrc.match(/(\.\d{3}|0\.\d{3,4})\s*(?:"|IN\b|THK|THICK|SHEET|SHT|ALUM|CRS|STL|SS|STAINLESS|X\b)/i))) put("thickness", m[1], "guess");
+      if (!f.thickness && matText && (m = matText.match(/(\d)\s*\/\s*(\d{1,2})\s*(?:"|IN|PLATE|PL)?/))) put("thickness", m[1] + "/" + m[2], "found");
+      if (!f.thickness && (m = thkSrc.match(/(\d+(?:\.\d+)?)\s*MM\s*(?:THK|THICK|SHEET)/i))) put("thickness", m[1] + " mm", "found");
+      // flat pattern / blank size
+      var dimRe = /(\d+(?:\.\d+)?)\s*(?:"|IN|MM)?\s*[xX×]\s*(\d+(?:\.\d+)?)/;
+      if ((m = T.match(new RegExp("(?:FLAT\\s*(?:PATTERN|SIZE|BLANK|LAYOUT|DIM(?:ENSION)?S?)|BLANK\\s*(?:SIZE|DIM)|DEVELOPED\\s*(?:SIZE|LENGTH)|UNFOLDED)[^0-9]{0,30}" + dimRe.source, "i")))) { put("length", m[1], "found"); put("width", m[2], "found"); }
+      else if ((m = T.match(new RegExp("(?:SHEET|BLANK|STOCK|CUT)\\s*(?:SIZE)?[^0-9]{0,15}" + dimRe.source, "i")))) { put("length", m[1], "guess"); put("width", m[2], "guess"); }
+      else { // largest "A x B" pair on the drawing as a weak guess
+        var re = new RegExp(dimRe.source, "g"), best = null, mm2; while ((mm2 = re.exec(T))) { var a = parseFloat(mm2[1]), b = parseFloat(mm2[2]); if (a > 0.25 && b > 0.25 && a < 400 && b < 400 && (!best || a * b > best[0] * best[1])) best = [a, b]; }
+        if (best) { put("length", String(best[0]), "guess"); put("width", String(best[1]), "guess"); }
+      }
+      if ((m = U.match(/\b(?:QTY|QUANTITY|QTY\s*REQ(?:'?D)?|PCS|PIECES)\s*[:.\-]?\s*(\d{1,6})\b/))) put("qty", m[1], "found");
+      var isMM = /\b(?:MILLIMET|DIMENSIONS\s*(?:ARE\s*)?IN\s*MM|UNITS?\s*[:=]?\s*MM)/i.test(T) && !/\bINCHES\b/i.test(T);
+      put("units", isMM ? "mm" : "in", isMM ? "found" : "guess");
+      ["part", "material", "thickness", "length", "width", "qty"].forEach(function (k) { if (!f[k]) f[k] = { v: "", tag: "missing" }; });
+      return f;
+    }
+    function readDrawing(file) {
+      var d = { id: "d" + Date.now() + Math.random().toString(36).slice(2, 6), name: file.name, status: "Reading…", fields: null, text: "", file: file, canvas: null };
+      state.drawings.push(d); renderDrawings();
+      loadPdfjs().then(function (pdfjs) { return file.arrayBuffer().then(function (buf) { d.buf = buf; return pdfjs.getDocument({ data: buf.slice(0) }).promise; }); })
+        .then(function (pdf) {
+          d.pages = pdf.numPages;
+          return pdf.getPage(1).then(function (page) {
+            var vp = page.getViewport({ scale: 1 }), scale = 420 / vp.width, v2 = page.getViewport({ scale: scale });
+            var cv = document.createElement("canvas"); cv.width = v2.width; cv.height = v2.height; d.canvas = cv;
+            return page.render({ canvasContext: cv.getContext("2d"), viewport: v2 }).promise.then(function () { return page.getTextContent(); });
+          }).then(function (tc) {
+            d.text = tc.items.map(function (it) { return it.str; }).join(" ");
+            if (d.text.replace(/\s/g, "").length < 20) { d.status = "No text layer — this looks like a scanned drawing. Fill in the fields, or use the AI reader if your site has one configured."; d.fields = parseDrawingText(""); }
+            else { d.fields = parseDrawingText(d.text); d.status = "Read from title block — check the fields before adding."; }
+            renderDrawings();
+          });
+        })
+        .catch(function (e) { d.status = "Couldn't read this PDF (" + (e && e.message ? e.message : e) + ")."; d.fields = parseDrawingText(""); renderDrawings(); });
+    }
+    function renderDrawings() {
+      var html = state.drawings.map(function (d) {
+        var f = d.fields || {}, fld = function (k, label, type, extra) {
+          var x = f[k] || { v: "", tag: "missing" };
+          return '<label class="smc-f"><span class="smc-l">' + label + ' <span class="smc-tag ' + x.tag + '">' + x.tag + '</span></span>' + (type === "select" ? '<select data-k="' + k + '">' + MAT_NAMES.map(function (n) { return '<option' + (n === x.v ? " selected" : "") + '>' + esc(n) + '</option>'; }).join("") + '</select>' : '<input type="text" data-k="' + k + '" value="' + esc(x.v) + '"' + (extra || "") + '>') + '</label>';
+        };
+        return '<div class="smc-dwg" data-id="' + d.id + '"><div class="smc-thumb"></div><div>' +
+          '<div class="smc-dwg-name"><span>' + esc(d.name) + '</span><small>' + esc(d.status) + '</small></div>' +
+          (d.fields ? '<div class="smc-dwg-fields">' + fld("part", "Part") + fld("rev", "Rev") + fld("material", "Material", "select") + fld("thickness", "Thickness") + fld("length", "Flat length") + fld("width", "Flat width") + fld("qty", "Qty") +
+            '<label class="smc-f"><span class="smc-l">Units <span class="smc-tag ' + (f.units ? f.units.tag : "guess") + '">' + (f.units ? f.units.tag : "guess") + '</span></span><select data-k="units"><option' + ((f.units && f.units.v) === "mm" ? "" : " selected") + '>in</option><option' + ((f.units && f.units.v) === "mm" ? " selected" : "") + '>mm</option></select></label></div>' +
+            '<div class="smc-dwg-act"><button type="button" class="smc-btn small primary" data-act="add">Add to parts list</button>' + (SMC_CONFIG.aiReaderEndpoint ? '<button type="button" class="smc-btn small" data-act="ai">Read with AI</button>' : '') + '<button type="button" class="smc-btn small" data-act="text">Show text</button><button type="button" class="smc-btn small" data-act="dismiss">Dismiss</button><span class="smc-dwg-msg" data-msg></span></div>' : '') +
+          '</div></div>';
+      }).join("");
+      el.drawings.innerHTML = html;
+      state.drawings.forEach(function (d) { if (d.canvas) { var t = el.drawings.querySelector('[data-id="' + d.id + '"] .smc-thumb'); if (t) t.appendChild(d.canvas); } });
+    }
+    el.drawings.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-act]"); if (!b) return; var box = b.closest(".smc-dwg"), id = box.getAttribute("data-id"), d = state.drawings.find(function (x) { return x.id === id; }), act = b.getAttribute("data-act");
+      if (act === "dismiss") { state.drawings = state.drawings.filter(function (x) { return x.id !== id; }); renderDrawings(); return; }
+      if (act === "text") { var w = window.open("", "_blank"); if (w) { w.document.write("<pre style='white-space:pre-wrap;font:13px monospace'>" + esc(d.text || "(no text layer)") + "</pre>"); w.document.close(); } return; }
+      if (act === "ai") { aiRead(d, box); return; }
+      var raw = { source: d.name };
+      Array.prototype.forEach.call(box.querySelectorAll("[data-k]"), function (inp) { raw[inp.getAttribute("data-k")] = inp.value; });
+      var mp = makePart(raw); if (!(mp.part.pl > 0 && mp.part.pw > 0)) { box.querySelector("[data-msg]").textContent = "Enter a flat length and width first."; return; }
+      mp.part.pn = mp.part.pn || d.name.replace(/\.pdf$/i, ""); state.parts.push(mp.part); renderParts();
+      box.querySelector("[data-msg]").textContent = "Added." + (mp.notes.length ? " Note: " + mp.notes.join("; ") : "");
+    });
+    // Optional AI reader: POST {filename, pdfBase64} to your endpoint; expect {part, rev, material, thickness, length, width, qty, units, notes}
+    function aiRead(d, box) {
+      var msg = box.querySelector("[data-msg]"); msg.textContent = "Asking the AI reader…";
+      var bytes = new Uint8Array(d.buf), bin = ""; for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      fetch(SMC_CONFIG.aiReaderEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: d.name, pdfBase64: btoa(bin) }) })
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then(function (j) {
+          var f = {};["part", "rev", "material", "thickness", "length", "width", "qty", "units"].forEach(function (k) { f[k] = { v: j[k] != null ? String(j[k]) : "", tag: j[k] != null && j[k] !== "" ? "found" : "missing" }; });
+          if (f.material.v) { var rm = resolveMaterial(f.material.v); f.material.v = rm || f.material.v; if (!rm) f.material.tag = "guess"; }
+          d.fields = f; d.status = "Read by AI — check the fields before adding." + (j.notes ? " " + j.notes : ""); renderDrawings();
+        })
+        .catch(function (e) { msg.textContent = "AI reader failed (" + e.message + ")."; });
+    }
+
+    // ---------- Lead capture ----------
+    function setNote(t) { el.note.textContent = t; }
+    el.copy.addEventListener("click", function () { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(state.lastSummary).then(function () { setNote("Summary copied."); }, function () { setNote("Could not copy."); }); else setNote("Copy is not available in this browser."); });
+    el.send.addEventListener("click", function () {
+      var email = el.email.value.trim(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setNote("Enter an email address to send the estimate to."); el.email.focus(); return; }
+      var summary = state.lastSummary; if (state.parts.length) { summary += "\n\nParts list (" + state.parts.length + "):\n" + state.parts.map(function (p) { var o = costPart(p); return (p.pn || "part") + " — " + p.mat + " " + p.thk.toFixed(4) + " in, " + p.pl.toFixed(2) + "×" + p.pw.toFixed(2) + " in ×" + p.qty + ": " + money(o.per) + "/part, " + money(o.total); }).join("\n"); }
+      var payload = { email: email, summary: summary, sentAt: new Date().toISOString(), page: location.href };
+      if (SMC_CONFIG.leadEndpoint) {
+        el.send.disabled = true; setNote("Sending…");
+        fetch(SMC_CONFIG.leadEndpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then(function (r) { if (!r.ok) throw new Error(); setNote("Sent. Check " + email + " in a minute."); }).catch(function () { setNote("Couldn't send right now. Copy the summary instead."); }).then(function () { el.send.disabled = false; });
+      } else { location.href = "mailto:" + encodeURIComponent(SMC_CONFIG.shopEmail) + "?subject=" + encodeURIComponent("Material estimate request") + "&body=" + encodeURIComponent("From: " + email + "\n\n" + summary); setNote("Opening your mail app with the estimate."); }
+    });
+
+    // ---------- Wire up ----------
+    state.lock = true; el.minstrip.value = SMC_CONFIG.minStripInches; el.markup.value = SMC_CONFIG.markupPct;
+    fillMaterials(); fillSheets(); fillProcesses(); fillThickness(); state.lock = false;
+    el.mat.addEventListener("change", function () { fillThickness(); calc(); });
+    el.gauge.addEventListener("change", function () { applyThickness(); calc(); });
+    el.sheet.addEventListener("change", function () { applySheet(); calc(); });
+    el.proc.addEventListener("change", function () { applyProcess(); calc(); });
+    el.basisLb.addEventListener("click", function () { setBasis("lb"); }); el.basisSheet.addEventListener("click", function () { setBasis("sheet"); });
+    el.uIn.addEventListener("click", function () { setUnits("in"); }); el.uMm.addEventListener("click", function () { setUnits("mm"); });
+    ["thk", "lbsqft", "dens", "pl", "pw", "qty", "area", "gap", "clamp", "sl", "sw", "edge", "pps", "rot", "price", "method", "minstrip", "markup", "scrap", "scrapon"].forEach(function (k) { el[k].addEventListener("input", calc); el[k].addEventListener("change", calc); });
+    ["method", "minstrip", "markup", "scrap", "scrapon", "edge", "rot"].forEach(function (k) { el[k].addEventListener("change", renderParts); el[k].addEventListener("input", renderParts); });
+    el.thk.addEventListener("input", function () { if (el.gauge.value === "custom") { el.lbsqft.value = (num(el.thk.value) * 144 * num(el.dens.value)).toFixed(3); calc(); } });
+    calc(); renderParts();
+    window.SMC = { parseDrawingText: parseDrawingText, makePart: makePart, importCSV: importCSV, resolveMaterial: resolveMaterial, resolveThickness: resolveThickness, state: state, costPart: costPart };
+  })();
+</script>
