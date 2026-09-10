@@ -4,6 +4,164 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Spec reconciliation before Task 1.2
+
+Ten discrepancies found reviewing the revised REQUIREMENTS/BUILD-PLAN/CLAUDE.md against
+the course correction and the seed. Four were resolved by the §3 rewrite (machines as
+work centers) and §12 (data vs. code); the rest are below.
+
+**Fixed cost is the setup roll-up, not a shop constant.** *(owner-approved)*
+§5.6 read `fixed_cost = Σ op fixed_$ + shop fixed cost ($20) + NRE`, which prices the §9
+part at $40 of fixed cost where the workbook shows $20 — it would have missed all six
+selling prices. The evidence says D13 is a sum, not a setting: Σ(setupHrs × rate) over the
+catalog is exactly $20.00, laser is the only operation carrying setup, and D13 is $20.00.
+So `fixed_cost = Σ(setupHrs × ratePerHr) + shopFixedCostPerJob + NRE`, and the seed's
+`shop_fixed_cost_per_job` is **0**, not 20 — a flat per-job adder a shop may set, seeded
+empty. This is the same "loaded quote's output in a settings table" pattern already removed
+from coating and punch. The extractor asserts the D13-equals-setup-roll-up relationship on
+every run and files a note if a future save breaks it. *Alternative:* treat the $20 as a
+shop charge and bill setup inside direct labor (rejected — a job with three setups would
+then cost the same as a job with one).
+
+**The oracle is seventeen numbers, stated once.** Six selling prices, six material
+percentages, five intermediates. "The ten golden numbers" appeared in four places and
+matched no reading: it omitted the material percentages that Task 1.4 asserts and the laser
+hours that 1.3 asserts. §9 now carries the five intermediates in a table naming which task
+asserts each; CLAUDE.md and BUILD-PLAN's three copies point at it instead of counting.
+
+**Q5 withdrawn a second time, and the reason recorded where it will be read.**
+The revised docs restored kerf as a parity flag in three places while §5.7's own text still
+called it a Setting. Kerf is now a **machine row** field — §3 moved clamp/kerf off "process
+presets" and onto machines, which is stronger than the earlier `ProcessPreset.kerfIn`: a
+shop with two lasers gives each its own. §12 rule 1 settles it — a value that differs
+between two shops in the same trade is Settings data, not a flag. Four flags remain.
+
+**`parity.machineTimeFactor`, a number.** §5.4 and BUILD-PLAN 1.4 had reverted to
+`machineOpsFactor60` with `(flag && machineOp ? 0.6 : 1)`, which puts 0.6 back in code —
+the number the correction moved into config. Now `isMachineOp ? parity.machineTimeFactor : 1`.
+
+**Operations carry `standard_unit`.** §3 asked for a unit of measure; the seed had a bare
+`standard_per_hr`, so nothing could tell 4 bends from 11 inches of weld. Seeded `pieces`
+everywhere except WELD and GRIND (`inches`), null for machine ops. Which of 200/hr and
+120 in/hr the workbook's 200 actually is remains ambiguous — noted in `docs/discovery.md`
+for §10 q1. Also aligned §3's `isMachineOp` to the seed's existing `kind: machine | manual`,
+which extends to a third kind without a schema change and is implied by a machine link.
+
+**The workbook's tumble formula is not seeded.** §6 carried
+`time = min(0.004 × area + 0.6, 2) h/100` — a per-100 expression keyed to one operation's
+name, and the only row in the catalog that would price unlike every other. Tumble seeds as
+an ordinary 100/hr row. If the owner confirms the area rule matters it returns as an
+optional area-based standard *any* operation can use. *Alternative:* special-case it in
+`operations.ts` (rejected — §12 rule 1).
+
+**Machine constants named, not inlined.** §5.2 still had `0.3 s`, `0.6 s`, `60 s`,
+`pps < 100` and `1.08` as literals with no home. They are now machine-row fields —
+`intersectionSec`, `rapidSec`, `palletChangeSec`, `palletThresholdParts`, `lossFactor` —
+listed in §3 and referenced by name in §5.2. Same for §5.1's literal 12
+(`minChargeStripIn`) and its "laser 1 in, punch 2 in" clamp (`clampStripIn`).
+A shuttle-table fiber laser has a different pallet time; a shop with better nesting software
+a different loss factor.
+
+**"TOTAL HIT COUNT" removed from §5.3 again**, matching the seed's ten tools.
+It is a spreadsheet subtotal row that sat between TAP and Relief at 6000/hr.
+
+Also: `packages/calc` described as "100% tested" in §2 where BUILD-PLAN 1.4 requires ≥95%;
+CLAUDE.md's bare "Node 22" against `engines: ">=22"` on Node 24. Both aligned.
+
+---
+
+## 2026-09-10 — Course correction: the workbook is an oracle, not a spec
+
+Full audit in `docs/course-correction.md`. Executed against it; these are the
+calls that went beyond a straight reading of that document.
+
+**The workbook stops being "the source of truth."**
+It is three things: a record of how the shop thinks about cost, seed data the
+owner overwrites on day one, and a validation oracle for the six §9 selling
+prices. CLAUDE.md principle 1 and REQUIREMENTS §5.7 were amended to match. The
+practical consequence is that the extractor now emits materially less than it
+reads: index numbers, source rows, laser optics, the metric speeds `speed_in_min`
+was derived from, helper columns, and every column holding the loaded quote's
+own outputs. *Alternative:* keep everything and let calc ignore what it doesn't
+need (rejected — an unused column is a column someone eventually writes a test
+against, which is how the engine ends up shaped like a spreadsheet).
+
+**The oracle is six prices, six percentages and five intermediates.**
+Blank cost 68.8358, min charge 8.6045, material per part 2.0859, qty-1 material
+10.3254, laser hours. Four of those are BUILD-PLAN 1.2's acceptance check and
+the fifth is 1.3's, so the list is the build plan's own, not a new one. No test
+may assert a workbook number outside it; `scaffold.test.ts` lost its
+`parts_per_blank === 33` and material-property assertions on that basis.
+*Alternative:* prices only (rejected — the four material intermediates are what
+localise a failure to §5.1 instead of "the price is wrong somewhere").
+
+**Laser hours are stored per part, not per 100.**
+0.0052255 h/part is the workbook's 0.52255 h/100 divided by 100 — same quantity,
+engine units. §11.4 already makes per-100 a display convention. The fixture
+carries a `_note` with the conversion so the number stays traceable to the
+sheet by eye. *Alternative:* store per-100 in the fixture only (rejected — the
+one place a per-100 number survives is the one place it gets copied from).
+
+**Operations carry `kind: machine | manual`, assigned here.**
+The workbook has no such column; it encodes the distinction as `std = 100`
+scaffolding so its `×K/std` formula resolves. `MACHINE_OPS` in the extractor
+names three: LASER, PEGA (50 X 72), EM2510NT (60 X 98) — one laser and two
+turret punches, whose hours come from the §5.2/§5.3 cutting worksheets rather
+than a parts-per-hour standard. Their `standard_per_hr` is emitted null, which
+drops EM2510NT's `F35 = 7` and PEGA's `F34 = 0`; both are noted in
+`docs/discovery.md` for the owner. 30-30 is treated as manual on its 250/hr
+standard. *Uncertain:* EM2510NT and 30-30 are the two a shop tour would settle
+in ten seconds; this needs confirming alongside §10 question 1.
+
+**`k_factor_observed` is gone; the ×60 survives as one number.**
+This reverses the 2026-09-09 decision to emit it per operation. 60 is a property
+of the pricing rule, not of any operation — 19 of 20 rows were null and could
+only ever be null, since a saved quote can only observe the operations it ran.
+It becomes `parity.machineTimeFactor = 0.6` (`60/100`, once the per-100
+scaffolding is removed), and the extractor still prints the observation
+`G33 × F33 / E33 = 60` on every run so the provenance is not lost.
+
+**"TOTAL HIT COUNT" removed from the punch tool list.**
+A spreadsheet subtotal row sitting between TAP and Relief with a 6000/hr rate.
+REQUIREMENTS §5.3 listed it among the tool rates — the same transcription error
+one level up — and was corrected too. Punch tools: 11 → 10.
+
+**Coating constants nested under `legacy`, and `minimum_charge_usd` left unset.**
+`s_constant` 5, `coverage` 100, `rate` 0.5 are quirk Q3's parameters, not
+physics, so they sit under a key that says so, beside `modern: null` for the
+§11.3 model the workbook has no source for. `CoatingModel.minimumChargeUsd`
+likewise has no source: W67 holds the loaded quote's own cost (1.0619), not a
+floor. Noted in `docs/discovery.md` rather than seeded with a number that looks
+authoritative.
+
+**Provenance moved out of config values.**
+`min_charge_strip_in` was `{value: 12, source: "derived", from: "W7 / (V7, Q170,
+R170)"}` — extraction metadata in a field an owner edits in Settings. It is now
+`12`; the derivation lives in the extractor docstring and in this log. The same
+reasoning removed `cell`/`source`/`from` from the fixture's intermediates.
+`sheet_cost`/`sheet_lbs` stay on materials, because those are the owner's own
+mental model when repricing ($/cwt, §11.2), not extraction bookkeeping.
+
+**Kerf demoted from parity flag Q5 to `ProcessPreset.kerfIn`.**
+§5.7 already described it as "Setting, default to workbook value", so this makes
+the code match what the spec said. Four parity flags remain. Also drops
+`clamp_subtracted_widths_in` from the seed: `[35, 36, 47, 48, 59, 60]` is each
+width beside its width-minus-clamp twin, and clamp subtraction is one line of
+arithmetic.
+
+**Process preset labels lost their embedded clamp value.**
+`LASER, 1" CLAMP DIM` restated `clamp_in: 1.0` in the label, which goes stale
+the first time an owner edits the number. Now `"Laser"` and `"Punch"`.
+
+**Seed JSON stays snake_case.**
+`docs/course-correction.md` §2 names the TS types in camelCase
+(`standardBlankLengthsIn`); the seed file that feeds them keeps the extractor's
+snake_case (`standard_blank_lengths_in`). The rename was of the concept — the
+workbook's "multiples" are standard blank lengths a shop buys — not of the
+serialisation convention. Task 2.2's seed loader maps the two.
+
+---
+
 ## 2026-09-09 — Task 1.1, monorepo scaffold
 
 **Node `engines: ">=22"`, developed on Node 24.13.**

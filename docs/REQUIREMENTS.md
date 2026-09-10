@@ -1,7 +1,9 @@
 # ShopQuote — Requirements & Reference Spec
 ### Internal quoting system for a sheet metal job shop (v1, single shop; designed to be re-deployed per shop)
 
-This document is the reference Claude should read before every task in BUILD-PLAN.md. It combines: (a) the shop's existing Excel estimator (`Quote_Metal_Cost.xls`, the source of truth for how this shop prices), (b) the browser prototype (`sheet-metal-material-calculator.html`, the reference implementation of the material module and of CSV/PDF intake), and (c) decisions made during planning.
+This document is the reference Claude should read before every task in BUILD-PLAN.md. It combines: (a) the shop's existing Excel estimator (`Quote_Metal_Cost.xls`), (b) the browser prototype (`sheet-metal-material-calculator.html`, the reference implementation of the material module and of CSV/PDF intake), and (c) decisions made during planning.
+
+**How to use the workbook.** It is three things and only three: a record of *how this shop thinks about cost* (take the concepts, model them in our own types); *seed data* for Settings (the owner overwrites it on day one); and a *validation oracle* for the small set of numbers in §9. It is not a specification. Do not replicate its layout, helper columns, index-number lookups, "per 100" internal representation, or any mechanism that doesn't change a selling price or help the estimator. When in doubt: would a modern shop that never had this spreadsheet want it?
 
 ---
 
@@ -9,7 +11,7 @@ This document is the reference Claude should read before every task in BUILD-PLA
 
 **Problem.** The estimator quotes from a 1998-era Excel workbook. It works, but it is one file, one user, no history, no quote log, no way to re-price a job when steel moves, and every quote is retyped from the drawing.
 
-**Goal for v1.** Replace the workbook with a small on-premises web app that: reproduces the workbook's numbers exactly (parity first), keeps every quote and its cost stack, prints the customer quote and the internal cost sheet, reads parts from CSV and PDF drawings, and lets the owner edit every rate and standard without a developer.
+**Goal for v1.** Replace the workbook with a small on-premises web app that: prices the way this shop prices (validated by the golden case in §9), keeps every quote and its cost stack, prints the customer quote and the internal cost sheet, reads parts from CSV and PDF drawings, and lets the owner edit every rate and standard without a developer.
 
 **Non-goals for v1.** Scheduling, job tracking, inventory, purchasing, invoicing, accounting integration, CAD/DXF nesting, customer portal. (The data model must not block these later — see §7.)
 
@@ -44,7 +46,7 @@ shopquote/
   docs/REQUIREMENTS.md      this file
   docs/BUILD-PLAN.md        task list
   docs/reference/           Quote_Metal_Cost.xls, prototype HTML, sample drawings/CSV
-  packages/calc/            pure TS costing engine, zero deps, 100% tested
+  packages/calc/            pure TS costing engine, zero deps, ≥95% covered
   packages/db/              Drizzle schema, migrations, seed
   apps/api/                 Fastify server
   apps/web/                 Vite React app
@@ -53,14 +55,20 @@ shopquote/
 
 **Principle: calc is a pure library.** `packages/calc` takes a `ShopConfig` (all rates and tables) and a `QuoteInput`, returns a `QuoteResult`. No DB, no I/O, deterministic. Everything else is plumbing around it. This is what makes the second shop a config change, not a rewrite.
 
+**Principle: nothing about a shop is a constant.** Equipment, materials, gauges, stock sizes, finishes, standards, units, currency, quantity breaks, markups, terms — all data. Code knows *shapes* (a machine has a rate and a setup time; a material has a density and a form), never *instances* (a laser, 16 ga CRS). See §12 for the full split.
+
 ---
 
 ## 3. Domain model (what the app knows about)
 
-- **Shop config** — one record per shop: name, logo, quote terms, default quantity breaks `[1,5,10,30,50,100]`, fixed cost per job ($20), labor markup (1.2), material markup (1.2), NRE rate ($100/hr) and NRE markup (1.3), minimum-charge strip (12 in), engineering defaults.
-- **Material catalog** — one row per stock item (the workbook's "material selection" table): name (`G30 16 GA (.0598)`), family (steel/galv/stainless/aluminum/copper/brass/wood/other), thickness in, lb/ft², $/lb, standard stock length (96/120/144), stock widths available (36/48/60), laser cutting speed in/min, pierce time s, punch rate factor, scrap $/lb, active flag. Prices are versioned (see §7).
-- **Process presets** — laser (clamp 1.0, spacing 0.5 per the workbook; 0.375 is the prototype's modern default — make it a setting), punch (2.0, 0.7), waterjet, plasma, shear.
-- **Operations catalog** — the workbook's operation table: name, setup hours, standard (parts/hr or in/hr), rate $/hr, unit type (`per100` manual ops vs `per60` machine ops — see §5.4 quirk), active.
+- **Shop config** — one record per shop: name, logo, **unit system** (`imperial | metric`, display/entry only; engine is always in/lb), **currency**, quote terms and validity days, default quantity breaks `[1,5,10,30,50,100]`, fixed cost per job, labor markup, material markup, NRE rate and markup, minimum-charge strip, parity flags, enabled cost modules (§12).
+- **Material families** — table: name (steel, galvanized, stainless, aluminum, copper, brass, …), density lb/in³, default scrap $/lb, aliases for intake matching (`CRS`, `A36`, `HRPO` → steel). Editable; a shop can add "acrylic" or "plywood".
+- **Gauge reference** — table: family × gauge label → decimal thickness (and optional lb/ft² override for coated stock). Seeded with MSG/galvanized/stainless/aluminum tables; editable.
+- **Material catalog** — one row per stock item: name, family, **form** (`sheet` in v1; `plate`, `bar`, `tube`, `purchased` reserved), thickness, lb/ft² (or lb/ft for bar), $/lb (versioned, §7), default stock size, scrap $/lb, aliases, active. No machine-specific numbers on this row.
+- **Stock sizes** — table per material (or per family): length × width, preferred flag. Replaces the hardcoded sheet list.
+- **Machines (work centers)** — table: name (`Laser 1`, `Pega 357`, `Brake 2`), type (`laser | punch | waterjet | plasma | shear | brake | weld | deburr | other`), rate $/hr, setup hrs default, consumables $/hr (assist gas), max sheet L × W, clamp strip in, part spacing/kerf in, pallet-change s, pallet threshold parts, intersection s, rapid s per pierce, loss factor, load/unload s per blank, hit-rate table for punches, active. A shop with two lasers has two rows. `type` selects which cost contributor (§12) prices the machine — it is never switched on inside a formula, so adding a waterjet is a Settings row plus an existing feature-based contributor, not a code change. This table supersedes the workbook's "process presets": clamp and kerf live on the machine that has them.
+- **Machine–material rates** — table: machine × material → cutting speed in/min, pierce s, punch rate factor. This is where the workbook's speed columns go. Missing pair → estimator is warned, not blocked.
+- **Operations catalog** — name, optional machine (work center) it runs on, setup hours, standard (parts/hr, in/hr, bends/hr, etc.), `standardUnit` (`pieces | inches | sqIn`, so the UI can label the input and calc can validate it), rate $/hr (inherited from the machine when linked), `kind` (`machine | manual` — selects quirk Q2's factor; implied by a machine link, stored explicitly because the workbook has no such column), active. A shop defines its own list; the seed is the workbook's.
 - **Finish tables** — plating specs (min lot $, $/in², part min $), coating models (powder/liquid), silkscreen tiers.
 - **Assembly standards** — seconds per action.
 - **Customer** — name, contact, email, terms, default markup override.
@@ -103,24 +111,24 @@ shopquote/
 
 ---
 
-## 5. Costing rules (parity with the workbook)
+## 5. Costing rules
 
-Where the workbook's behavior is quirky, v1 **reproduces it** behind a flag so the golden test passes, and the flag can be turned off later once the owner agrees. Each quirk is listed in §5.7.
+These are the shop's pricing *concepts*, written as formulas. Implement them as clean per-part functions with explicit inputs; the workbook's cell mechanics are not the spec. Where the workbook's behavior is quirky, v1 reproduces the *result* behind a flag so the golden test passes (§5.7); it does not reproduce the mechanism.
 
 ### 5.1 Material
 ```
 lb_ft²        from catalog (coated steels carry coated weight)
 blank_area    = L × W  (in²)
 blank_lbs     = blank_area / 144 × lb_ft²
-nesting       clamp off one width edge (laser 1 in, punch 2 in); kerf/spacing added to each part dimension;
+nesting       clamp off one width edge (clampStripIn from the machine row); kerf/spacing added to each part dimension;
               parts_across = trunc((stock_width − clamp) / (dim + kerf)) ;  parts_along = trunc(std_length / (other_dim + kerf));
               try both orientations, take max  → parts_per_blank (pps)
 blank_cost    = (stock_width × std_length / 144) × lb_ft² × $/lb
 mtl_per_part  = blank_cost / pps                                   ["share of blank"]
-min_charge    = (stock_width × 12 / 144) × lb_ft² × $/lb            [12 in strip]
+min_charge    = (stock_width × minChargeStripIn / 144) × lb_ft² × $/lb   [shop default 12 in]
 mtl_at_qty    = MAX(mtl_per_part, min_charge / qty × material_markup)   ← note markup inside the MAX (quirk Q1)
 ```
-Std length comes from the material row (aluminum 144, steel 120, wood 96). The workbook also evaluates a table of shorter "multiples" (12–144 in) to pick the best blank length; v1 offers std length plus the multiples table as selectable blank lengths and shows yield for each.
+Std length comes from the material row (aluminum 144, steel 120). Blank length is a single user-editable input defaulting to std length; the UI may offer a short list of common cut lengths (e.g. 48, 60, 72, 96, 120, 144) with yield shown for each. The workbook's multiples lookup grid is not a data structure we keep.
 
 ### 5.2 Cutting — laser
 ```
@@ -128,30 +136,31 @@ cut_in        = Σ holes π·d·n + Σ obrounds ((L−W)·2 + π·W)·n + Σ rec
 pierces       = feature count + 1
 pierce_hrs    = pierces × pierce_s / 3600
 cut_hrs       = (cut_in / speed_in_min) / 60
-intersections = n × 0.3 s ; rapids = pierces × 0.6 s ; pallet change 60 s ÷ parts_per_sheet (only if pps < 100)
-laser_hrs_100 = (pierce_hrs + cut_hrs + rapids + intersections + pallet) × 108      [per 100 parts, ×1.08 loss]
+intersections = n × intersectionSec ; rapids = pierces × rapidSec
+pallet change = palletChangeSec ÷ parts_per_sheet, only while parts_per_sheet < palletThresholdParts
+laserHrsPerPart = (pierce_hrs + cut_hrs + rapids + intersections + pallet) × lossFactor   [per part]
 ```
-Speed and pierce come from the material row. Seed values in §6.
+Every named constant above is a **machine row** field, not a literal: `intersectionSec` (0.3), `rapidSec` (0.6), `palletChangeSec` (60), `palletThresholdParts` (100), `lossFactor` (1.08) — the workbook's values, seeded and editable. A shuttle-table fiber laser has a different pallet time and a shop with better nesting software a different loss factor, so none of them may be hardcoded. Speed and pierce come from the **machine–material rate** for the selected machine; clamp, kerf and assist-gas $/hr from the machine row. Seed values in §6 are loaded against a single seed machine ("Laser 1") — the owner renames it or adds more.
 
 ### 5.3 Cutting — turret punch
-Hit counter by tool type × hit rate (bridges 5000/hr, cluster 4000, countersink 4500, EKO 4500, emboss 3500, extrusion 5000, tap 3000, total-hit 6000, relief 5500, trim 5000) + load/unload 40 s per blank; punch rate factor from material row; sheets for 100 = roundup(100 / pps).
+Hit counter by tool type × hit rate (seeded: bridges 5000/hr, cluster 4000, countersink 4500, EKO 4500, emboss 3500, extrusion 5000, tap 3000, relief 5500, trim 5000 — stored per punch machine; ten tools, not eleven: the workbook's "TOTAL HIT COUNT" row is a spreadsheet subtotal, not a tool) + load/unload s per blank (machine row); punch rate factor from the machine–material rate.
 
 ### 5.4 Operations (labor)
-Per operation row: `setup_hrs`, `std` (parts/hr, or inches/hr for weld/grind), `rate` $/hr.
+Per operation row: `setupHrs`, `standard` (parts/hr, or in/hr for weld/grind), `ratePerHr`. All engine math is **per part**; "per 100" is a display convention only.
 ```
-fixed_$      = setup_hrs × rate                       (per job; amortized ÷ qty — appears in "FIXED COST")
-hrs_100      = oper_hrs_100 × K / std                 K = 60 for machine ops, 100 for manual ops   ← quirk Q2
-direct_$_100 = hrs_100 × rate
-direct_per_part = direct_$_100 / 100
+fixed$        = setupHrs × ratePerHr                          (per job; ÷ qty in the roll-up)
+hrsPerPart    = machine ops: hours from §5.2/§5.3 per part ;  manual ops: units / standard
+directPerPart = hrsPerPart × ratePerHr × (isMachineOp ? parity.machineTimeFactor : 1)   ← quirk Q2 as a dialable factor
 ```
-Where `oper_hrs_100` is the laser/punch hours from 5.2/5.3, or for manual ops `100 / std` hours. Seed standards in §6.
+`parity.machineTimeFactor` is a **number**, not a boolean: 0.6 reproduces the workbook's ×60 (recovered as `G33 × F33 / E33 = 60`, i.e. 60/100), and 1.0 bills machine time as machine time. An owner can dial anything between. Seed standards in §6.
 
 ### 5.5 Finish
 - **Plating**: `MAX(lot_min / qty, $/in² × blank_area, part_min)` per part.
 - **Powder/liquid coat** (workbook model, reproduce as-is — quirk Q3): `cost = rate × (perimeter / T × S)` with the workbook's S=5, T=100, rate=0.5 for powder; plus plugs/caps 0.05, fill/prep 0.25, masking dots 0.05, mask/demask minutes × $25/hr, parts per hook (600/180) or hanger (600/90), liquid-texture adder +50%, minimum rate. `perimeter = 2(L+W)`.
 - **Silkscreen**: screen charge (one-time, amortized) + print cost per part by tier.
 
-### 5.6 Roll-up per quantity break (exact workbook order)
+### 5.6 Roll-up per quantity break
+The roll-up is trade-agnostic: it sums *cost contributors*, each tagged with a bucket (`material | labor | fixed | finish | hardware | nre`) and a markup class. Sheet-metal modules (nesting, laser, punch, brake) are contributors; a machining shop would register different ones. The workbook's order, expressed in those buckets:
 ```
 material_block = sheet_material(qty) + sheet_extras + hardware + plating          × material_markup
 labor_block    = (fixed_cost / qty + direct_labor + setup_extra_labor)              × labor_markup
@@ -159,15 +168,18 @@ unmarked       = painting + silkscreen                                          
 selling        = material_block + labor_block + unmarked
 mtl_pct_sp     = sheet_material(qty) ÷ selling
 ```
-Where `fixed_cost` = Σ op fixed_$ + shop fixed cost ($20 default) + NRE.
+Where `fixed_cost` = Σ op fixed_$ (that is, Σ `setupHrs × ratePerHr` over the operations on the part) + `shopFixedCostPerJob` + NRE.
+
+`shopFixedCostPerJob` is an optional flat per-job adder and **seeds to 0**. The workbook's `D13` = $20 is not a shop constant: it is the sum of the per-operation fixed-dollar column, and for the golden part the laser's only setup (0.2 h × $100) accounts for all of it. Seeding it as a $20 shop default would double-count to $40 and miss every §9 price. A shop that does want a flat job charge sets it in Settings.
 
 ### 5.7 Quirks to reproduce behind flags (`config.parity.*`)
 - **Q1** Material markup applied inside the minimum-charge MAX.
-- **Q2** Machine-op hours use ×60 while manual ops use ×100 (laser direct labor comes out at 0.6× the raw hours). Ask the owner what the 60 means; keep until answered.
+- **Q2** `machineTimeFactor` — machine-op hours are billed at 0.6× (the workbook's ×60 against manual ops' ×100). A number, not a boolean: 0.6 = workbook, 1.0 = machine time billed as machine time. Ask the owner what the 60 means; keep until answered.
 - **Q3** Powder-coat "area" is actually the perimeter, and the constants (5, 100, 0.5) are unexplained. Reproduce, then confirm.
 - **Q4** Painting and silkscreen are added after markups (no markup).
-- **Q5** Laser kerf 0.5 in (modern fiber shops use ~0.25–0.375). Setting, default to workbook value.
-Each flag defaults to the workbook behavior. The golden test runs with all flags on.
+- **Q5** — *withdrawn; not a flag.* Kerf/part spacing is a **machine row** field (`kerfIn`, §3), seeded at the workbook's 0.5 for "Laser 1". A fiber shop types 0.375 in Settings; a shop with two lasers gives each its own. Nothing is lost — the golden case pins 0.5 in its fixture — and a flag would have needed a defensible "off" value that only the machine row can supply.
+
+So `config.parity.*` carries **four** flags: Q1–Q4. Each defaults to the workbook behavior and the golden test runs with all of them on. Turning one off requires a row in `docs/parity-report.md` and, per §11.3, a real alternative path — never `else → 0`.
 
 ---
 
@@ -191,7 +203,9 @@ COPPER .032            0.032   1.490  3.82   96   –    –     –
 ```
 Prices are 2023-era; the owner will update on day one — which is exactly the workflow FR-1 must make easy.
 
-**Operations:** shear 100/hr $75; laser setup 0.2 h, $100/hr; punch (Pega 50×72, EM2510NT 60×98) $75; drill/csk 167; drill/tap 200; deburr 100; tumble 100 (time = min(0.004×area+0.6, 2) h/100); brake 222 and 330; weld 200 (and 120 in/hr); grind 200 (120 in/hr); spot weld 215; PEM 350; stud weld 100; rivet 150; machining 100; check & straighten 60; assembly 80. All $75/hr except laser $100.
+**Operations:** shear 100/hr $75; laser setup 0.2 h, $100/hr; punch (Pega 50×72, EM2510NT 60×98) $75; drill/csk 167; drill/tap 200; deburr 100; tumble 100; brake 222 and 330; weld 200; grind 200; spot weld 215; PEM 350; stud weld 100; rivet 150; machining 100; check & straighten 60; assembly 80. All $75/hr except laser $100. Standards are per hour of the row's `standardUnit`: `pieces` for most, `inches` for weld and grind (the workbook also notes 120 in/hr for both — the estimator picks the row that matches how the feature is counted).
+
+The workbook's tumble line carried a bespoke formula (`min(0.004 × area + 0.6, 2)` hours per 100). It is not seeded: a per-100 expression keyed to one operation's name is exactly the hardcoding §12 rule 1 forbids, and it would be the only operation in the catalog that prices differently from every other. Tumble seeds as an ordinary 100/hr row. If the owner confirms the area rule matters, it returns as an optional area-based standard *any* operation can use, not as a special case.
 
 **Bends:** 220–250 bends/hr.  **Plating table:** 43 rows in xls rows 72–115 (spec, lot min, $/in², part min).  **Assembly standards:** xls sheet "Assy-Handling Cost Estimator" (seconds per action).  **Clamp/kerf:** laser 1.0/0.5, punch 2.0/0.7.  **Sheet widths:** 36/48/60.  **Blank multiples:** 12,18,20,24,28.8,30,36,40,48,60,72,80,96,100,120,144.
 
@@ -222,16 +236,16 @@ Prices are 2023-era; the owner will update on day one — which is exactly the w
 
 ---
 
-## 9. Golden test (must pass before any UI work)
+## 9. Golden test (must pass before any UI work) — the *only* workbook parity that matters
 
 Inputs (taken from the workbook as saved):
 - Material: `G30 16 GA (.0598)` — 2.656 lb/ft², $0.8099/lb, laser speed 220 in/min, pierce 0.1 s
 - Part 13.38 × 7.858 in, blank area 105.14 in², blank lbs 1.9392
 - Laser, clamp 1.0, kerf 0.5, stock width 48, blank length 96 → **33 parts per blank**
-- Laser worksheet: perimeter cut 58 in, 1 pierce, 1 intersection → laser hrs/100 = **0.52255** (with 1.08)
-- Laser op: setup 0.2 h × $100 = **$20 fixed**; direct labor per part **$0.31353**
+- Laser worksheet: perimeter cut 58 in, 1 pierce, 1 intersection → **0.0052255 laser hours per part** (with the 1.08 loss factor; the workbook displays this as 0.52255 per 100)
+- Laser op: setup 0.2 h × $100 = **$20**, which *is* the job's fixed cost (§5.6); direct labor per part **$0.31353**
 - Powder coat: perimeter 42.476 → **$1.0619** per part (min rate 1.0619)
-- Fixed cost $20, labor markup 1.2, material markup 1.2, NRE 0
+- Shop flat charge 0, labor markup 1.2, material markup 1.2, NRE 0 — so fixed cost = $20, all of it laser setup
 - Quantity breaks 1, 5, 10, 30, 50, 100
 
 Expected:
@@ -244,9 +258,19 @@ Expected:
 | 50 | 2.0859 | **4.4213** | 47.2% |
 | 100 | 2.0859 | **4.1813** | 49.9% |
 
-Intermediate checks: blank cost 68.83; min charge 8.6045; material per part 2.0859; qty-1 material 10.3254 = max(2.0859, 8.6045 × 1.2).
+**The oracle, in full — six selling prices, six material percentages, and five intermediates.** Nothing else. The five:
 
-Tolerance ±0.005. Add a second fixture once the estimator gives you a recent real quote with its Excel result.
+| Intermediate | Value | Asserted by |
+|---|---|---|
+| blank cost | 68.8358 | §5.1, Task 1.2 |
+| min charge | 8.6045 | §5.1, Task 1.2 |
+| material per part | 2.0859 | §5.1, Task 1.2 |
+| qty-1 material | 10.3254 = max(2.0859, 8.6045 × 1.2) | §5.1, Task 1.2 |
+| laser hours per part | 0.0052255 | §5.2, Task 1.3 |
+
+Tolerance ±0.005 on price, ±0.001 on material % of SP, 4 decimals on the intermediates. Add a second fixture once the estimator gives you a recent real quote with its Excel result.
+
+**What not to test:** any other workbook intermediate (nesting-table cells, per-100 columns, lookup indices, sheet factors). Tests assert our own function outputs against the seventeen numbers above and against hand-derived cases; they never assert cell-for-cell agreement.
 
 ---
 
@@ -274,7 +298,7 @@ Share-of-blank material costing; minimum-charge strip; quantity breaks with setu
 | Item | Workbook | 2026 reality | Action |
 |---|---|---|---|
 | Laser speeds / pierce | CO₂-era (16 ga CRS 254 in/min, 0.1 s) | Fiber 6–12 kW: ~3–4× faster thin gauge; sub-0.1 s pierces | Speed/pierce columns editable per material; add a "laser type" note; add **assist-gas $/hr** to the laser rate |
-| Kerf/spacing | 0.5 in laser | 0.25–0.375 in fiber | Process preset (flag Q5) |
+| Kerf/spacing | 0.5 in laser | 0.25–0.375 in fiber | Machine row (`kerfIn`), per machine — not a flag (see §5.7 Q5) |
 | Shop rates | $75 manual, $100 laser | ~$85–125 manual, $150–250 laser | Operations table |
 | Material prices | 2023 | tariff-volatile | Versioned prices; add **$/cwt** input (÷100) alongside $/lb; optional surcharge % line |
 | Plating spec names | QQ-P-35, MIL-C-5541, QQ-P-416, QQ-N-290, MIL-C-13924, MIL-C-26074 | ASTM A967/AMS 2700, MIL-DTL-5541, AMS-QQ-P-416, AMS-QQ-N-290, MIL-DTL-13924, ASTM B733 | Refresh names; keep old names as aliases for reading old drawings |
@@ -293,3 +317,29 @@ Q2 (×60 machine factor) and Q3 (perimeter-as-area coating) are almost certainly
 
 ### 11.5 Explicitly not changing
 Nesting method (grid) for estimating; per-operation standards structure; the six-break quote layout the shop's customers already know.
+
+
+---
+
+## 12. Configurability model — what is data vs. what is code
+
+| Data (Settings, per shop; exported/imported as config JSON) | Code (shared by every shop) |
+|---|---|
+| Machines and their rates, setup, kerf/clamp, capacities, consumables | The shape of a machine and how its time turns into cost |
+| Machine × material speeds, pierce times, punch factors | The laser/punch time models |
+| Material families, gauge tables, catalog, stock sizes, versioned prices, aliases | The material module (sheet nesting, share-of-blank, minimum strip) |
+| Operations catalog and standards | Setup + standard + rate → cost |
+| Plating specs, coating models, silkscreen tiers, assembly standards | The MAX(lot, per-in², part-min) rule; the coating model |
+| Markups, fixed cost, NRE rate, quantity breaks, minimum strip, validity, terms, logo | The roll-up and PDF templates |
+| Unit system, currency, number formats | Conversion at the edges; engine in in/lb/$ |
+| Parity flags | The alternate code paths they select |
+| Enabled cost modules (`sheetMetal.nesting`, `sheetMetal.laser`, `sheetMetal.punch`, `forming.brake`, `finish.plating`, …) | The module registry and the contributor interface |
+| Intake aliases (material names, header synonyms, drawing keywords) | The resolvers and parsers |
+| Users, roles | Auth |
+
+Rules:
+1. If a value could differ between two shops in the same trade, it is a Settings field.
+2. If a *capability* could differ between trades (sheet vs. bar stock, laser vs. CNC mill), it is a module behind the contributor interface, switchable per shop.
+3. Seed data is a starting point, never a fallback in code. Missing data produces a visible warning ("no speed for Laser 2 × 304 SS 11 ga"), never a silent default.
+4. The multi-shop schema (`shops` table, `shop_id` on every table) is kept even though v1 deploys single-tenant, so a hosted multi-shop version later is a deployment choice, not a migration.
+5. `packages/calc` exposes `CostContributor { id, bucket, markupClass, compute(input, config, qty): ContributorResult }`. The sheet-metal modules are the first implementations; the roll-up depends only on the interface.
