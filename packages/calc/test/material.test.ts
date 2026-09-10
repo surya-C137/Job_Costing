@@ -183,10 +183,7 @@ describe('yieldForLengths (§5.1)', () => {
 
     const ninetySix = rows.find((r) => r.blankLengthIn === 96);
     expect(ninetySix?.nesting.partsPerBlank).toBe(golden.nesting.parts_per_blank);
-    expect(ninetySix?.materialPerPartUsd).toBeCloseTo(
-      golden.intermediates.material_per_part,
-      4,
-    );
+    expect(ninetySix?.materialPerPartUsd).toBeCloseTo(golden.intermediates.material_per_part, 4);
   });
 
   it('leaves the caller its own params untouched', () => {
@@ -279,11 +276,39 @@ describe('resolution failures and edge cases', () => {
       10,
     );
     expect(result.usdPerPart).toBe(0);
+    expect(result.warnings[0]?.code).toBe('unknown-reference');
     expect(result.warnings[0]?.message).toContain('material-nope');
   });
 
+  /**
+   * §12 rule 3, and not a hypothetical: the workbook stocks fourteen brushed
+   * stainless gauges with no price in the sheet at all. A shop halfway through
+   * entering its catalog has the same hole. Quoting them at zero would price a
+   * job as though the steel were free, so the price is null and the estimator
+   * is told which material to go and price.
+   */
+  it('refuses to price stock that has no $/lb, and names it', () => {
+    const config = goldenConfig();
+    const material = config.materials[0];
+    if (material === undefined) throw new Error('fixture config has no material');
+    material.pricePerLbUsd = null;
+
+    const part = goldenPart();
+    const result = sheetMetalNestingContributor.compute(
+      { part, quote: quoteFor(part) },
+      config,
+      100,
+    );
+    expect(result.usdPerPart).toBe(0);
+    expect(result.warnings.map((w) => w.code)).toContain('missing-material-price');
+    expect(result.warnings[0]?.message).toContain(material.name);
+  });
+
   it('reports an unknown machine the same way', () => {
-    const part = { ...goldenPart(), nesting: { ...goldenPart().nesting, machineId: 'machine-nope' } };
+    const part = {
+      ...goldenPart(),
+      nesting: { ...goldenPart().nesting, machineId: 'machine-nope' },
+    };
     const result = sheetMetalNestingContributor.compute(
       { part, quote: quoteFor(part) },
       goldenConfig(),

@@ -80,6 +80,11 @@ INCH_STANDARD_OPS = {"weld", "grind"}
 
 unresolved: list[dict] = []
 
+# Things the extractor decided rather than read -- a collapsed duplicate, a row
+# dropped as worksheet residue. Printed in the run summary so a decision never
+# happens silently.
+NOTES: list[str] = []
+
 
 def note(table: str, cell: str, what: str, why: str) -> None:
     unresolved.append({"table": table, "cell": cell, "field": what, "why": why})
@@ -558,8 +563,18 @@ def extract_process_presets(pcw: Sheet, laser: Sheet, ops: list[dict],
 def extract_assembly(assy: Sheet) -> list[dict]:
     """Seconds per action. Column B is the standard time; C is the count for
     whatever assembly was last estimated, so C and D are quote data and are
-    skipped. Section headers (a label with no standard) become `section`."""
-    rows, section = [], None
+    skipped. Section headers (a label with no standard) become `section`.
+
+    Keys are section-scoped, and identical repeats collapse. The sheet is a
+    worksheet, not a catalog: it lists INSTALL POP RIVETS under both HARDWARE
+    and RIVETING, and gives LATCH ASSEMBLY/S two ATTACH SPRING rows so the
+    estimator has two slots to count into. Those are one standard each -- 12 s
+    and 30 s -- and emitting them twice gave five duplicate keys, which is a
+    duplicate `AssemblyStandard.id` the moment calc builds a ShopConfig from
+    this file. A repeat carrying a *different* time is a real second standard
+    and keeps both, disambiguated the way duplicate operation names are.
+    """
+    rows, section, seen, collapsed = [], None, {}, []
     for r in range(3, assy.sh.nrows + 1):
         label = assy.text(r, "A")
         if not label:
@@ -568,13 +583,31 @@ def extract_assembly(assy: Sheet) -> list[dict]:
         if std is None:
             section = label
             continue
-        rows.append({
+
+        key = slug(f"{section} {label}") if section else slug(label)
+        previous = seen.get(key)
+        if previous is not None:
+            if previous["std_seconds"] == std:
+                collapsed.append(f"A{r} {label} ({section})")
+                continue
+            key = f"{key}-{int(std) if std else len(seen)}"
+
+        row = {
             "row": r,
             "section": section,
-            "key": slug(label),
+            "key": key,
             "action": label,
             "std_seconds": std,
-        })
+        }
+        seen[key] = row
+        rows.append(row)
+
+    if collapsed:
+        NOTES.append(
+            "Assembly standards: %d repeated row(s) collapsed -- the same action at the "
+            "same standard time, listed twice so the worksheet had two slots to count "
+            "into: %s" % (len(collapsed), "; ".join(collapsed))
+        )
     return rows
 
 
@@ -881,6 +914,11 @@ def main() -> int:
           f"-> parity.machineTimeFactor {k / 100:g}")
     print(f"Laser kerf -> Machine.kerfIn, a Settings field (Q5 withdrawn): "
           f"{golden['nesting']['kerf_in']}")
+
+    if NOTES:
+        print(f"\n{len(NOTES)} extraction decision(s)")
+        for n in NOTES:
+            print(f"  {n}")
 
     if unresolved:
         print(f"\n{len(unresolved)} unresolved cell(s) -> docs/discovery.md")

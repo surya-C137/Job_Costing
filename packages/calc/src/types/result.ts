@@ -41,7 +41,9 @@ export type CalcErrorCode =
   /** A number that has to be positive was zero or negative. */
   | 'invalid-input'
   /** No `MachineMaterialRate` for the chosen machine and material (§12 rule 3). */
-  | 'missing-machine-material-rate';
+  | 'missing-machine-material-rate'
+  /** The material has no $/lb: stocked but never priced (§12 rule 3). */
+  | 'missing-material-price';
 
 /**
  * Something the estimator should see but that never blocks a price
@@ -61,6 +63,9 @@ export type WarningCode =
   | 'low-yield'
   /** The material row is switched off in Settings but still referenced. */
   | 'material-inactive'
+  /** The part points at a material, machine or operation this config does not
+   *  have — an archived row, or an import that named something unknown. */
+  | 'unknown-reference'
   /** A non-RoHS finish on a customer flagged RoHS (§11.2). */
   | 'non-rohs-finish'
   /** A machine/material pairing has no rate; the estimator has to add one
@@ -68,6 +73,9 @@ export type WarningCode =
   | 'missing-machine-material-rate'
   /** An operation's standard is missing or zero, so its hours are zero. */
   | 'missing-standard'
+  /** The part's material carries no $/lb, so it cannot be costed. The
+   *  estimator enters a price in Settings; calc will not invent one. */
+  | 'missing-material-price'
   /** The part's cutting input does not match the selected machine's time
    *  model — a punch hit counter against a laser, say (§5.2/§5.3). */
   | 'cutting-model-mismatch'

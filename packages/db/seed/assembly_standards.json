@@ -2,266 +2,238 @@
   {
     "row": 4,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "remove-install-screw-in-place-tighten",
+    "key": "hardware-tiewraps-bushings-etc-remove-install-screw-in-place-tighten",
     "action": "REMOVE/INSTALL SCREW IN PLACE & TIGHTEN",
     "std_seconds": 15.0
   },
   {
     "row": 5,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "install-nut-in-place-tighten",
+    "key": "hardware-tiewraps-bushings-etc-install-nut-in-place-tighten",
     "action": "INSTALL NUT IN PLACE & TIGHTEN",
     "std_seconds": 15.0
   },
   {
     "row": 6,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "number-of-washers-used-in-this-assembly",
+    "key": "hardware-tiewraps-bushings-etc-number-of-washers-used-in-this-assembly",
     "action": "NUMBER OF WASHERS USED IN THIS ASSEMBLY",
     "std_seconds": 5.0
   },
   {
     "row": 7,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "install-cable-tie-wrap-trim",
+    "key": "hardware-tiewraps-bushings-etc-install-cable-tie-wrap-trim",
     "action": "INSTALL CABLE TIE WRAP & TRIM",
     "std_seconds": 15.0
   },
   {
     "row": 8,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "install-adhesive-cable-tie-mount-tape-per-foot",
+    "key": "hardware-tiewraps-bushings-etc-install-adhesive-cable-tie-mount-tape-per-foot",
     "action": "INSTALL ADHESIVE CABLE TIE MOUNT/TAPE (PER FOOT)",
     "std_seconds": 20.0
   },
   {
     "row": 9,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "install-nylon-bushing",
+    "key": "hardware-tiewraps-bushings-etc-install-nylon-bushing",
     "action": "INSTALL NYLON BUSHING",
     "std_seconds": 10.0
   },
   {
     "row": 10,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "install-hartwell-latches",
+    "key": "hardware-tiewraps-bushings-etc-install-hartwell-latches",
     "action": "INSTALL HARTWELL LATCHES",
     "std_seconds": 15.0
   },
   {
     "row": 11,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "number-of-details-to-gather-for-this-assy",
+    "key": "hardware-tiewraps-bushings-etc-number-of-details-to-gather-for-this-assy",
     "action": "NUMBER OF DETAILS TO GATHER FOR THIS ASSY",
     "std_seconds": 10.0
   },
   {
     "row": 12,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "verari-install-210338-001-guide",
+    "key": "hardware-tiewraps-bushings-etc-verari-install-210338-001-guide",
     "action": "VERARI, install 210338-001 Guide",
     "std_seconds": 16.0
   },
   {
     "row": 13,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "verari-position-110120-001-spring-for-riveting",
+    "key": "hardware-tiewraps-bushings-etc-verari-position-110120-001-spring-for-riveting",
     "action": "VERARI, position 110120-001 spring for riveting",
     "std_seconds": 10.0
   },
   {
     "row": 14,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "install-pop-rivets",
+    "key": "hardware-tiewraps-bushings-etc-install-pop-rivets",
     "action": "INSTALL POP RIVETS",
     "std_seconds": 12.0
   },
   {
     "row": 15,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "fons-door-gasket-strips",
+    "key": "hardware-tiewraps-bushings-etc-fons-door-gasket-strips",
     "action": "FONS DOOR GASKET STRIPS",
     "std_seconds": 30.0
   },
   {
     "row": 16,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "fons-silicone-gasket-joint-seal-of-joints-to-seal",
+    "key": "hardware-tiewraps-bushings-etc-fons-silicone-gasket-joint-seal-of-joints-to-seal",
     "action": "FONS SILICONE GASKET JOINT SEAL (# OF JOINTS TO SEAL)",
     "std_seconds": 30.0
   },
   {
     "row": 17,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "fons-dirak-handle-assembly",
+    "key": "hardware-tiewraps-bushings-etc-fons-dirak-handle-assembly",
     "action": "FONS DIRAK HANDLE ASSEMBLY",
     "std_seconds": 300.0
   },
   {
     "row": 18,
     "section": "HARDWARE / TIEWRAPS/ BUSHINGS, ETC.",
-    "key": "miscellaneous",
+    "key": "hardware-tiewraps-bushings-etc-miscellaneous",
     "action": "MISCELLANEOUS\u2026\u2026\u2026\u2026\u2026\u2026\u2026..",
     "std_seconds": 10.0
   },
   {
     "row": 21,
     "section": "RIVETING",
-    "key": "install-pop-rivets",
+    "key": "riveting-install-pop-rivets",
     "action": "INSTALL POP RIVETS",
     "std_seconds": 12.0
   },
   {
     "row": 22,
     "section": "RIVETING",
-    "key": "number-of-details-to-gather-for-this-assy",
+    "key": "riveting-number-of-details-to-gather-for-this-assy",
     "action": "NUMBER OF DETAILS TO GATHER FOR THIS ASSY",
     "std_seconds": 10.0
   },
   {
     "row": 23,
     "section": "RIVETING",
-    "key": "time-to-position-and-clamp-details",
+    "key": "riveting-time-to-position-and-clamp-details",
     "action": "TIME TO POSITION AND CLAMP DETAILS",
     "std_seconds": 30.0
   },
   {
     "row": 25,
     "section": "RIVETING",
-    "key": "install-ms-style-solid-rivets",
+    "key": "riveting-install-ms-style-solid-rivets",
     "action": "INSTALL \"MS\" STYLE SOLID RIVETS",
     "std_seconds": 35.0
   },
   {
-    "row": 26,
-    "section": "RIVETING",
-    "key": "number-of-details-to-gather-for-this-assy",
-    "action": "NUMBER OF DETAILS TO GATHER FOR THIS ASSY",
-    "std_seconds": 10.0
-  },
-  {
-    "row": 27,
-    "section": "RIVETING",
-    "key": "time-to-position-and-clamp-details",
-    "action": "TIME TO POSITION AND CLAMP DETAILS",
-    "std_seconds": 30.0
-  },
-  {
     "row": 30,
     "section": "SPOTWELDING",
-    "key": "number-of-spotwelds-in-steel",
+    "key": "spotwelding-number-of-spotwelds-in-steel",
     "action": "NUMBER OF SPOTWELDS IN STEEL",
     "std_seconds": 5.0
   },
   {
     "row": 31,
     "section": "SPOTWELDING",
-    "key": "number-of-spotwelds-in-aluminum",
+    "key": "spotwelding-number-of-spotwelds-in-aluminum",
     "action": "NUMBER OF SPOTWELDS IN ALUMINUM",
     "std_seconds": 8.0
   },
   {
     "row": 32,
     "section": "SPOTWELDING",
-    "key": "number-of-details-to-gather-for-this-assembly",
+    "key": "spotwelding-number-of-details-to-gather-for-this-assembly",
     "action": "NUMBER OF DETAILS TO GATHER FOR THIS ASSEMBLY",
     "std_seconds": 10.0
   },
   {
     "row": 33,
     "section": "SPOTWELDING",
-    "key": "number-of-cleko-s-to-use",
+    "key": "spotwelding-number-of-cleko-s-to-use",
     "action": "NUMBER OF CLEKO'S TO USE",
     "std_seconds": 15.0
   },
   {
     "row": 34,
     "section": "SPOTWELDING",
-    "key": "time-to-position-and-clamp-details",
+    "key": "spotwelding-time-to-position-and-clamp-details",
     "action": "TIME TO POSITION AND CLAMP DETAILS",
     "std_seconds": 30.0
   },
   {
     "row": 37,
     "section": "STUD WELDING",
-    "key": "install-and-remove-fixture",
+    "key": "stud-welding-install-and-remove-fixture",
     "action": "INSTALL AND REMOVE FIXTURE",
     "std_seconds": 60.0
   },
   {
     "row": 38,
     "section": "STUD WELDING",
-    "key": "number-of-studs",
+    "key": "stud-welding-number-of-studs",
     "action": "NUMBER OF STUDS",
     "std_seconds": 10.0
   },
   {
     "row": 41,
     "section": "LATCH ASSEMBLY/S",
-    "key": "assemble-lock-piece-parts-with-hardware-per-pc",
+    "key": "latch-assembly-s-assemble-lock-piece-parts-with-hardware-per-pc",
     "action": "ASSEMBLE LOCK PIECE PARTS WITH HARDWARE/PER PC",
     "std_seconds": 45.0
   },
   {
     "row": 42,
     "section": "LATCH ASSEMBLY/S",
-    "key": "attach-spring-to-assembly",
+    "key": "latch-assembly-s-attach-spring-to-assembly",
     "action": "ATTACH SPRING TO ASSEMBLY",
     "std_seconds": 30.0
   },
   {
     "row": 43,
     "section": "LATCH ASSEMBLY/S",
-    "key": "assemble-piece-parts-with-hardware-per-pc",
-    "action": "ASSEMBLE PIECE PARTS WITH HARDWARE/PER PC",
-    "std_seconds": 45.0
-  },
-  {
-    "row": 44,
-    "section": "LATCH ASSEMBLY/S",
-    "key": "attach-spring-to-assembly",
-    "action": "ATTACH SPRING TO ASSEMBLY",
-    "std_seconds": 30.0
-  },
-  {
-    "row": 45,
-    "section": "LATCH ASSEMBLY/S",
-    "key": "assemble-piece-parts-with-hardware-per-pc",
+    "key": "latch-assembly-s-assemble-piece-parts-with-hardware-per-pc",
     "action": "ASSEMBLE PIECE PARTS WITH HARDWARE/PER PC",
     "std_seconds": 45.0
   },
   {
     "row": 47,
     "section": "MISCELLANEOUS",
-    "key": "install-jumper",
+    "key": "miscellaneous-install-jumper",
     "action": "INSTALL JUMPER",
     "std_seconds": 10.0
   },
   {
     "row": 48,
     "section": "MISCELLANEOUS",
-    "key": "assemble-install-kit-box-label",
+    "key": "miscellaneous-assemble-install-kit-box-label",
     "action": "ASSEMBLE INSTALL KIT/BOX/LABEL",
     "std_seconds": 120.0
   },
   {
     "row": 49,
     "section": "MISCELLANEOUS",
-    "key": "package-in-small-carton-14",
+    "key": "miscellaneous-package-in-small-carton-14",
     "action": "PACKAGE IN SMALL CARTON < 14\"",
     "std_seconds": 45.0
   },
   {
     "row": 50,
     "section": "MISCELLANEOUS",
-    "key": "package-in-medium-carton-14-20",
+    "key": "miscellaneous-package-in-medium-carton-14-20",
     "action": "PACKAGE IN MEDIUM CARTON > 14\" < 20\"",
     "std_seconds": 75.0
   },
   {
     "row": 51,
     "section": "MISCELLANEOUS",
-    "key": "package-in-large-carton-20",
+    "key": "miscellaneous-package-in-large-carton-20",
     "action": "PACKAGE IN LARGE CARTON > 20\"",
     "std_seconds": 60.0
   }

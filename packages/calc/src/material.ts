@@ -15,12 +15,14 @@ import { findMachine, findMaterial } from './lookup.js';
 import type { ShopConfig } from './types/config.js';
 import type { CostContributor, ContributorInput } from './types/contributor.js';
 import type {
+  CalcErrorCode,
   ContributorResult,
   LengthYield,
   MaterialCost,
   Nesting,
   Result,
   Warning,
+  WarningCode,
 } from './types/result.js';
 import { err, ok } from './types/result.js';
 
@@ -235,8 +237,7 @@ export function yieldForLengths(p: MaterialParams, blankLengthsIn: number[]): Le
     return {
       blankLengthIn,
       nesting,
-      materialPerPartUsd:
-        nesting.partsPerBlank > 0 ? blankCostUsd(at) / nesting.partsPerBlank : 0,
+      materialPerPartUsd: nesting.partsPerBlank > 0 ? blankCostUsd(at) / nesting.partsPerBlank : 0,
     };
   });
 }
@@ -271,6 +272,16 @@ export function materialParamsFor(
     });
   }
 
+  if (material.pricePerLbUsd === null) {
+    return err({
+      code: 'missing-material-price',
+      message:
+        `${material.name} has no price per pound, so this part cannot be costed. ` +
+        `Enter one in Settings — nothing here will assume a number for it.`,
+      partId: part.id,
+    });
+  }
+
   const params: MaterialParams = {
     flatLengthIn: part.flatLengthIn,
     flatWidthIn: part.flatWidthIn,
@@ -286,6 +297,23 @@ export function materialParamsFor(
       : { partsPerBlankOverride: part.nesting.partsPerBlankOverride }),
   };
   return ok(params);
+}
+
+/**
+ * Which amber box the estimator sees when the material module cannot price a
+ * part. Every one of these is a warning rather than a block (CLAUDE.md Design)
+ * — the rest of the stack still shows, and the estimator fixes the one thing
+ * named.
+ */
+function warningCodeFor(code: CalcErrorCode): WarningCode {
+  switch (code) {
+    case 'missing-material-price':
+      return 'missing-material-price';
+    case 'part-does-not-fit':
+      return 'part-does-not-fit';
+    default:
+      return 'unknown-reference';
+  }
 }
 
 /**
@@ -306,7 +334,11 @@ export const sheetMetalNestingContributor: CostContributor = {
 
     const params = materialParamsFor(input, config);
     if (!params.ok) {
-      warnings.push({ code: 'part-does-not-fit', message: params.error.message, partId });
+      warnings.push({
+        code: warningCodeFor(params.error.code),
+        message: params.error.message,
+        partId,
+      });
       return { usdPerPart: 0, warnings };
     }
 

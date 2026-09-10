@@ -55,6 +55,13 @@ export default tseslint.config(
     },
   },
   {
+    /* The db package's command-line entry points. `db:migrate` and `db:seed`
+       report what they did to whoever ran them - a seed that prints nothing is
+       a seed you cannot tell from a no-op. */
+    files: ['packages/db/src/cli.ts', 'packages/db/src/{migrate,seed,seed-blank}.ts'],
+    rules: { 'no-console': 'off' },
+  },
+  {
     /* Build and tooling scripts run in Node and are meant to print. Declaring
        the globals here rather than pulling in `globals` keeps the dependency
        list short; extend the list if a script needs more. */

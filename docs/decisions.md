@@ -4,6 +4,193 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Task 2.1, schema, migrations and the two seed loaders
+
+`npm run db:migrate && npm run db:seed` produces `data/shopquote.db` with 80
+materials, 20 operations and 25 tables. `db:seed-blank` produces the same
+database with gauge tables and nothing else.
+
+### The organising decision
+
+**The catalog tables are the normalised form of `ShopConfig`, and nothing
+more.** Everything from `shops` down to `assembly_standards` exists because a
+field of `ShopConfig` needs somewhere to live. The consequence is that the seed
+does *not* map seed JSON to SQL: it reads the files, calls calc's
+`shopConfigFromSeed()` — the same call the golden test makes with no database
+in sight — and then `writeShopConfig()` turns that config into rows. So there
+is one mapping from the workbook's shape to the app's rather than two, and
+Task 2.2's `loadShopConfig()` is simply this function's inverse, which is what
+makes "seed it, load it back, price §9 through it" a test rather than a hope.
+*Alternative:* a direct seed-JSON-to-SQL loader (rejected — it is the obvious
+shape and it silently breaks the guarantee that the database holds what the
+golden test proves).
+
+The same rule decides what is *not* stored. `coating.json`'s adders (plugs and
+caps, mask time, parts per hook) and `blank_multiples.json`'s standard blank
+lengths have no `ShopConfig` field yet, so they get no table yet: a table
+nothing writes back into a config cannot take part in the round trip and would
+rot. They stay in the seed files, and land when §5.5's full coating model and
+§5.1's length picker reach the types.
+
+### Schema shape
+
+**A part's repeating structures are JSON columns; its identity is columns.**
+`part_number`, `rev`, `material_id`, `flat_length_in` and the rest are real
+columns because the quote log, part search and a later material-usage report
+filter on them. The cut-feature list, operation lines, finish selections,
+hardware and NRE are JSON typed to `PartInput`'s own members. Normalising those
+would be five more tables, a mapping layer to keep in step with `PartInput`, and
+a migration every time the engine learns a new feature shape — and nothing
+queries across them; no screen asks which parts have more than four bends. Zod
+validates the JSON at the API boundary in Phase 3, against `PartInput` itself.
+*Alternative:* full normalisation (rejected on the above); a single JSON blob
+per part (rejected — the quote log needs SQL).
+
+**One table beyond BUILD-PLAN's list: `config_snapshots`, content-addressed.**
+§4 FR-2 makes every autosave a version and §7 makes every version carry the
+config it was priced with, but a `ShopConfig` with this catalog in it is ~100 KB
+of JSON. One copy per version is tens of megabytes a day into a file whose
+backup story is "copy it", and every copy identical — Settings changes a few
+times a year, autosave fires every few seconds. So the snapshot is stored once
+per distinct config, keyed by a SHA-256 of it, and `quote_versions` points at
+it. A day of editing shares one row; re-pricing after a rate change writes one
+more. *Alternative:* the config JSON on `quote_versions` (rejected on the
+arithmetic); storing only a diff (rejected — reconstructing a config to price
+against is exactly where you do not want cleverness).
+
+**Ids are re-issued as ULIDs and the old id becomes `source_key`.** §7 says
+stored ids are ULIDs; the seed's are slugs (`material:g30-16-ga-0598`).
+`writeShopConfig()` issues a ULID per entity, keeps the config id in
+`source_key` for provenance, and returns the map so anything following a
+reference can translate. Nothing joins on `source_key`; an owner-created row
+leaves it null.
+
+**`material_prices` carries `sheet_cost_usd` and `sheet_lbs`.** They are how the
+owner arrives at a $/lb — what a sheet cost and what it weighed (§11.2's $/cwt
+entry) — so they are provenance *for that price version*, not a property of the
+material. They move with the price.
+
+**Timestamps are epoch milliseconds; `archived_at` only where soft delete means
+something.** Sessions expire; `quote_versions`, `config_snapshots` and
+`audit_log` are append-only history. Everything the owner can remove is
+soft-deleted per §7.
+
+**`operations` has no unique index on the name.** The workbook carries
+"BRAKE, BEND" twice, at 222/hr and 330/hr, and both are real standards the
+estimator picks between. Materials, machines, families, plating specs, coating
+models and silkscreen tiers do carry one — a duplicate there is a data problem
+the owner should see.
+
+**Machines keep the seed's names, "Laser" and "Punch".** BUILD-PLAN 2.1 says
+"Laser 1" and "Punch 1"; renaming them in the DB layer would make the database
+disagree with `shopConfigFromSeed()` and break 2.2's round trip for the sake of
+a suffix the owner renames on day one anyway.
+
+### What the boundary check found
+
+**`MaterialRow.pricePerLbUsd` is now `number | null`, and this was a live bug.**
+Adding Zod to the seed loader (CLAUDE.md: at every boundary) immediately failed
+on `price_per_lb: null` — fourteen brushed-stainless rows the workbook never
+priced. calc's `SeedMaterial` declared it `number`, so `shopConfigFromSeed()`
+has been putting a runtime `null` typed as `number` into those materials since
+Task 1.4, and any arithmetic on them would have produced `NaN`. The type is now
+honest, `materialParamsFor()` returns a typed `missing-material-price` failure,
+and the contributor turns it into a named amber warning at $0 — §12 rule 3, and
+the alternative is quoting a job as though the steel were free. The seed writes
+no price row for those materials rather than a zero. Two warning codes came with
+it: `missing-material-price` and `unknown-reference` (the contributor had been
+reporting every resolution failure as `part-does-not-fit`, which was already
+wrong for an unknown material and would have been worse for this).
+
+**The extractor was emitting duplicate assembly-standard keys.** Five actions
+appear more than once on the `Assy-Handling` sheet — INSTALL POP RIVETS under
+both HARDWARE and RIVETING, ATTACH SPRING twice under LATCH ASSEMBLY/S — and
+`slug(label)` collapsed them into one key, which is a duplicate
+`AssemblyStandard.id` the moment calc builds a config. The sheet is a worksheet,
+not a catalog: those are one standard each, listed twice so the estimator has
+two slots to count into. `extract_assembly()` now keys on section + action and
+collapses an identical repeat, keeping both only when the times differ — the
+same treatment `extract_operations()` already gave duplicate names. 38 rows
+became 34, no §9 number moved, and the run prints what it collapsed.
+`writeShopConfig()` also now throws on a duplicate id rather than absorbing it.
+
+### Things that are only true on Windows
+
+**`db:migrate` and `db:seed` run the built output, not `node
+--experimental-strip-types`.** The scaffold's scripts assumed Node could run
+`src/*.ts` directly. It can strip types, but it does not resolve `./schema.js`
+to `schema.ts`, and NodeNext + `verbatimModuleSyntax` requires that `.js`
+extension. So each script is `npm run build && node dist/x.js`. *Alternative:*
+`tsx` (a dependency for something `tsc` already does); rewriting the imports to
+`.ts` (breaks the emitted build).
+
+**The root `db:*` scripts call `node` directly rather than a second `npm run`.**
+Two levels of npm mangle `-- --shop-name "Two Words"` on Windows into
+caret-escaped nonsense; one level is fine. Both seeders also accept
+`SHOPQUOTE_SHOP_NAME`, which is the reliable route on a Windows Server box and
+consistent with how the admin credentials arrive.
+
+**`drizzle-orm` is a root devDependency as well as `packages/db`'s
+dependency.** drizzle-kit resolves `drizzle-orm/version` from its own location
+in the hoisted root `node_modules`, and npm deterministically nests the
+workspace copy under `packages/db/node_modules` where the generator cannot see
+it — `drizzle-kit generate` fails with "Please install latest version of
+drizzle-orm". Both are pinned to the same range and the lockfile holds them to
+one version. *Alternative:* hand-writing the migration SQL (fragile, and the
+snapshot in `drizzle/meta` has to match it exactly).
+
+### Passwords, seeded shops, and gauge tables
+
+**Password hashing is scrypt inside a PHC string, with argon2 still the plan.**
+BUILD-PLAN 3.1 names argon2 and that has not changed. What Task 2.1 needs is a
+*stored format*, and one that cannot accept argon2 later means re-hashing every
+password in a migration. So the stored value is
+`$scrypt$n=16384,r=8,p=1$salt$hash`, `verifyPassword()` dispatches on the
+algorithm named inside it, and 3.1 adds an `$argon2id$` branch that re-hashes on
+the next successful login. scrypt in the meantime is Node's own — no native
+module on a Windows box — and memory-hard. `needsRehash()` is already there.
+
+**The seed refuses a database that already holds a shop.** The schema is
+multi-shop (§12 rule 4) so a second shop is a real thing to want, but on a v1
+deployment it is almost always a re-run of the command, and a silently doubled
+catalog is very hard to spot. `--force` says you meant it.
+
+**Seeded prices are dated 2023-01-01, not today.** §6 says the workbook's prices
+are 2023-era. §7's versioned prices exist so `loadShopConfig(asOf)` can answer
+what a material cost on the day a quote was priced; stamping the seed "now"
+makes every historical answer wrong, and it hides the fact that the first thing
+the owner does is update them. The seed prints how many of the 80 materials
+actually carry a price.
+
+**Gauge tables are hand-authored in `src/reference/gauges.ts`, not in `seed/`.**
+`seed/` is extractor output and gets overwritten; MSG, galvanised, US Standard
+and Brown & Sharpe come from the trade. Two conventions in there look like
+errors and are not: steel and galvanised rows carry the standard's *book weight*
+as `lbPerSqFtOverride` rather than thickness × density (MSG defines 16 ga as
+2.5 lb/ft²; mild steel at 0.2836 lb/in³ would say 2.44 — and the workbook's own
+four gauges agree with the book), and a galvanised row pairs the *base*
+thickness with the *coated* weight, which is what the workbook's G30 16 GA
+(.0598) at 2.656 lb/ft² does and what a drawing calling out 16 ga galvanised
+means. One deliberate divergence: the stainless table is US Standard Gauge
+(16 ga = 0.0625), where this shop's catalog reads stainless on the steel table
+(.0598). The reference table is only ever a starting point for a shop that does
+not have this workbook.
+
+**A blank shop starts at markup 1.0 with a 0-inch minimum strip and all four
+parity flags off.** "Not set yet" as arithmetic that changes nothing, rather
+than this shop's 1.2 and 12 inches wearing another shop's name — and a quote
+priced at markup 1.0 is visibly priced at cost. The parity flags exist to
+reproduce one 1998 workbook; a shop that never had it should not inherit its
+quirks (Phase 6 says the same).
+
+**Zod is a `packages/db` dependency now**, at the same range `apps/api` already
+declares. Its schemas mirror calc's `Seed*` interfaces rather than replacing
+them — calc owns the shape because calc owns the mapping — and
+`readSeedBundle()`'s return type is annotated `SeedBundle`, so the type checker
+fails the build if the two drift.
+
+---
+
 ## 2026-09-10 — Task 1.5, parity flags off, and the report
 
 `docs/parity-report.md` exists, generated rather than written, and every delta

@@ -103,9 +103,18 @@ export interface MaterialRow {
   thicknessIn: number | null;
   /** Areal weight, lb/ft². Coated steels carry their coated weight (§5.1). */
   lbPerSqFt: number;
-  /** Purchase price, $/lb. Versioned in the DB; a `ShopConfig` holds the one
-   *  effective at its `asOf` (§7). */
-  pricePerLbUsd: number;
+  /**
+   * Purchase price, $/lb. Versioned in the DB; a `ShopConfig` holds the one
+   * effective at its `asOf` (§7).
+   *
+   * **Null when the shop stocks it but has not priced it.** The workbook has
+   * fourteen such rows — the brushed stainless #4B range, quoted by asking the
+   * supplier — and a shop mid-way through entering its catalog will have more.
+   * The material module refuses to price a part on unpriced stock and says so
+   * (§12 rule 3: missing data warns visibly, it never silently defaults). It
+   * is emphatically not zero: free steel would quietly under-quote a job.
+   */
+  pricePerLbUsd: number | null;
   /** Tariff/alloy surcharge, as a fraction of `pricePerLbUsd` (§11.2). 0 = none. */
   surchargePct: number;
   /** Scrap credit, $/lb. Supported, off by default (§11.4 item 4). */

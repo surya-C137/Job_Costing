@@ -47,7 +47,8 @@ export interface SeedMaterial {
   family: string;
   thickness_in: number | null;
   lb_per_sq_ft: number;
-  price_per_lb: number;
+  /** Null where the workbook priced the row by asking the supplier. */
+  price_per_lb: number | null;
   std_length_in: number | null;
   speed_in_min: number | null;
   pierce_s: number | null;

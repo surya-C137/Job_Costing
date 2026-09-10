@@ -16,14 +16,17 @@
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:migrate": "node --experimental-strip-types src/migrate.ts",
-    "db:seed": "node --experimental-strip-types src/seed.ts"
+    "db:migrate": "node dist/migrate.js",
+    "db:seed": "node dist/seed.js",
+    "db:generate": "drizzle-kit generate",
+    "db:seed-blank": "node dist/seed-blank.js"
   },
   "dependencies": {
     "@shopquote/calc": "*",
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.45.2",
-    "ulid": "^2.3.0"
+    "ulid": "^2.3.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
