@@ -287,6 +287,7 @@ Tolerance ±0.005 on price, ±0.001 on material % of SP, 4 decimals on the inter
 8. Where is the server; who is IT; backup target; how are drawings received (email/portal)?
 9. Which 10 recent quotes can we use for parallel validation?
 10. Pallet changes (§5.2): is the 60 s costed **once per 100-part run** — which is what the worksheet's `F33` does, and what reproduces §9 — or once per sheet, which for the golden part would be 2.4 changes and 4.9% more laser time? `F33` is numerically identical to the rapid-factor cell above it, so one save cannot tell the intended rule from a copy-paste.
+11. NRE (§5.6): the section puts NRE inside `fixed_cost`, and `fixed_cost` takes the labor markup — so a 1.3 NRE markup on a 1.2 labor markup compounds to 1.56. Is engineering meant to be marked up **once at 1.3**, or twice? The golden case has no NRE, so the oracle cannot settle it. Reproduced as written for now; if the answer is "once", it is a one-line change in `nre.ts`.
 
 ---
 
@@ -309,7 +310,17 @@ Share-of-blank material costing; minimum-charge strip; quantity breaks with setu
 | Quantity breaks | 1/5/10/30/50/100 | often also 250/500 | Config default; per-quote editable (already) |
 
 ### 11.3 Change behind flags (see §5.7)
-Q2 (×60 machine factor) and Q3 (perimeter-as-area coating) are almost certainly artifacts. Modern coating cost = coated area (both sides) ÷ coverage × powder $/lb + rack/hang labor + masking. Implement the modern model as the non-parity path so switching the flag off yields a defensible number, not zero.
+Q2 (×60 machine factor) and Q3 (perimeter-as-area coating) are almost certainly artifacts. The modern coating model uses the powder industry's standard coverage formula rather than the workbook's unexplained constants:
+
+```
+coverage ft²/lb = 192.3 ÷ specific gravity ÷ film mils × transfer efficiency
+cost            = coated area ft² ÷ coverage × powder $/lb + rack/hang + masking
+coated area     = L × W × sides ÷ 144
+```
+
+192.3 ft² is one pound of a specific-gravity-1.0 powder at 1 mil with perfect transfer. Storing the three inputs rather than a single coverage number matters because they are what an owner knows and changes: the powder's data sheet gives specific gravity, the finish spec gives film build, and the booth gives transfer efficiency (50–80% on a first pass, higher with reclaim). Implement it as the non-parity path so switching the flag off yields a defensible number, not zero.
+
+**A note on the plating rate, checked against the trade.** §5.5 charges plating at `$/in² × blank_area`, i.e. one face. Plating shops quote on exposed surface area — both faces — at roughly $0.75–$3.50/ft², with a $50–$400 lot minimum. The workbook's $0.05/in² is $7.20/ft² of *footprint*, which is $3.60/ft² of actual two-sided area and lands in the upper part of that range. The rate already has both sides in it. Doubling the area to "correct" the model would double the price; the seeded lot minimums ($125) are in range too. Left as it is, deliberately.
 
 ### 11.4 Add — capabilities the workbook couldn't have
 1. **DXF flat-pattern import** (Phase 4, after PDF intake): parse DXF (lines, arcs, circles, polylines, splines approximated) → outer profile bounding box, net area (shoelace on outer minus inner loops), total cut length, pierce count (= closed loops), hole list by diameter. Populates flat size, finished area, and the entire laser feature worksheet automatically. Library: `dxf-parser` (client or server), pure geometry in `packages/calc/src/intake/dxf.ts`, tested with three sample DXFs. STEP unfolding is out of scope (requires CAD kernel).

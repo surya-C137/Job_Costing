@@ -2,13 +2,31 @@
   {
     "key": "laser",
     "name": "Laser",
+    "kind": "laser",
+    "time_model": "featureBased",
+    "rate_per_hr": 100.0,
     "clamp_in": 1.0,
-    "kerf_in": 0.5
+    "kerf_in": 0.5,
+    "load_unload_s_per_blank": 40.0,
+    "pallet_change_s": 60.0,
+    "pallet_batch_parts": 100,
+    "intersection_s": 0.3,
+    "rapid_s_per_pierce": 0.6,
+    "loss_factor": 1.08
   },
   {
     "key": "punch",
     "name": "Punch",
+    "kind": "punch",
+    "time_model": "hitBased",
+    "rate_per_hr": 75.0,
     "clamp_in": 2.0,
-    "kerf_in": 0.7
+    "kerf_in": 0.7,
+    "load_unload_s_per_blank": 40.0,
+    "pallet_change_s": 60.0,
+    "pallet_batch_parts": 100,
+    "intersection_s": 0.3,
+    "rapid_s_per_pierce": 0.6,
+    "loss_factor": 1.08
   }
 ]

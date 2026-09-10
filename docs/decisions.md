@@ -4,6 +4,102 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Task 1.4, operations, finish, roll-up, and the golden test
+
+The golden test is green: six selling prices within ±0.005, six material
+percentages within ±0.001, five intermediates, built from `packages/db/seed/*`
+rather than a hand-made fixture.
+
+### Formulas checked against current practice, not just against the workbook
+
+**Powder coating coverage is a standard formula, and the workbook hides it.**
+The trade computes `coverage ft²/lb = 192.3 ÷ specific gravity ÷ film mils ×
+transfer efficiency` — 192.3 ft² being one pound of a specific-gravity-1.0
+powder at one mil with perfect transfer. §11.3's modern model originally stored
+a single opaque `coverageSqFtPerLb`, which hides all three of the numbers an
+owner actually has: the data sheet gives specific gravity, the finish spec gives
+film build, and the booth gives transfer efficiency (50–80% first-pass, higher
+with reclaim). `CoatingModel.modern` now stores the three inputs and derives
+coverage. *Alternative:* keep one coverage number and let the owner do the
+arithmetic (rejected — it puts a formula in a spreadsheet next to the app, which
+is how this project started).
+
+**Markup is a multiplier, not a margin, and the UI has to say so.**
+`materialMarkup: 1.2` is a 20% markup, which is a 16.7% *margin*. Those get
+confused constantly, and a shop aiming at a 35% margin needs a 1.54 multiplier.
+The engine is unchanged — ×1.2 is what reproduces §9 — but Task 4.2's Settings
+screen should label the field "markup ×" and show the resulting margin beside
+it. Also worth knowing when the owner refreshes the seed: 10–15% is the more
+common material markup now, against the workbook's 20%.
+
+**The plating rate is a footprint rate, and "fixing" it would double the price.**
+§5.5 charges `$/in² × blank_area`, i.e. one face, where plating houses quote on
+exposed surface area — both faces — at roughly $0.75–$3.50/ft² with a $50–$400
+lot minimum. The workbook's $0.05/in² is $7.20/ft² of footprint, which is
+$3.60/ft² of actual two-sided area and lands in the upper part of that range.
+The rate already has both sides in it. Left alone deliberately, and the reasoning
+is now in §11.3 so nobody "corrects" it later. The seeded $125 lot minimums are
+in range too, and the three-way `MAX(lot ÷ qty, per-area, part min)` is exactly
+how the trade quotes.
+
+### Decisions
+
+**NRE is marked up twice, because §5.6 says so.** The section puts NRE inside
+`fixed_cost`, and `fixed_cost` takes the labor markup — so 1.3 × 1.2 = 1.56.
+The golden case has no NRE, so the oracle cannot settle it either way.
+Reproduced as written on the same grounds as Q1 and Q2, flagged loudly in
+`nre.ts`, and raised as REQUIREMENTS §10 question 11. If the owner says once,
+deleting `× nreMarkup` is the whole fix. *Alternative:* silently mark once
+(rejected — it is a pricing change the owner has not approved, which CLAUDE.md
+puts on the ask-first list).
+
+**Buckets map one-to-one onto cost-stack lines.** `CostBucket` was
+`material | labor | fixed | finish | hardware | nre`, which could not place a
+contributor: "finish" covers plating (material block, marked) and coating
+(unmarked), and they land on different lines. Now one bucket per `CostStack`
+field, with `MarkupClass` carrying the arithmetic. Placing a contributor is a
+lookup rather than a decision, and a new bucket cannot be added without deciding
+where the estimator sees it.
+
+**Cutting time is charged once, to the operation that runs the cutting machine.**
+A part can carry several machine operations; only the one whose `machineId`
+matches the part's nesting machine gets the §5.2/§5.3 hours. Without that, a
+part routed across a laser and a punch would be billed the laser's time twice.
+
+**`shopConfigFromSeed()` lives in calc, not in `@shopquote/db`.**
+Two callers need the same mapping — Task 1.4's golden test, which runs with no
+database, and Task 2.1's `seed.ts`, which loads the same files into SQLite. If
+they each had their own, they would drift and the golden test would stop saying
+anything about what the database holds. Purity is intact: the caller reads the
+files and hands over parsed objects, the same split `intake/` uses.
+
+**The §5.2 timing constants are extracted, not typed.** `intersection_s` 0.3,
+`rapid_s_per_pierce` 0.6, `pallet_batch_parts` 100 and `loss_factor` 1.08 are
+solved out of the LASER WORKSHEET (`F31 × 3600 / F30`, and so on) and seeded on
+the machine row. The alternative was hardcoding them in calc, which §12 rule 1
+forbids and §5.2 explicitly calls out. They come from a single saved quote that
+ran one pierce and one intersection, so they reproduce §9 exactly but are not
+independently confirmed — noted in `docs/discovery.md` for the Task 5.2 pilot.
+
+**Two `PartInput` fields §5.6 names but §3 did not.** `materialExtrasUsd`
+(freight-in, cut-to-size) and `setupExtraLaborUsd` (fixturing, first article).
+Both optional, both zero in the golden case.
+
+**Coverage excludes nothing new.** `packages/calc/src` measures 99.9%
+statements, 97.8% branches, 100% functions. The branch gap that remained after
+the behavioural tests was `seed.ts`'s null-handling, so it is covered by a
+sparse-bundle test rather than by an exclusion — that bundle is what a shop
+onboarding without a workbook actually supplies, which Task 2.1's
+`seed-blank.ts` will need anyway.
+
+**A test tried to pin a workbook cell and the type checker caught it.**
+`finish.test.ts` reached for `golden.coating.cost_per_part`, which the course
+correction deleted from the fixture as a loaded-quote output. Both coating
+assertions now derive $1.0619 from the seeded constants and the part's own
+perimeter — a hand-derived case, which §9 allows, rather than a cell read.
+
+---
+
 ## 2026-09-10 — Task 1.3, cutting time (laser and punch)
 
 **§5.2's pallet rule did not reproduce §9, and the workbook wins.**

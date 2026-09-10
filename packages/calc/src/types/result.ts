@@ -85,8 +85,24 @@ export type WarningCode =
    */
   | 'part-does-not-fit';
 
-/** Which side of §5.6's roll-up a cost lands on. */
-export type CostBucket = 'material' | 'labor' | 'fixed' | 'finish' | 'hardware' | 'nre';
+/**
+ * Which line of the cost stack a contributor's dollars land on. One bucket per
+ * `CostStack` field, so placing a contributor is a lookup rather than a
+ * decision — and so a new bucket cannot be added without deciding where the
+ * estimator sees it.
+ *
+ * The *arithmetic* of §5.6 is driven by `MarkupClass`, not by this: several
+ * buckets share a markup.
+ */
+export type CostBucket =
+  | 'material'
+  | 'materialExtras'
+  | 'hardware'
+  | 'plating'
+  | 'fixed'
+  | 'labor'
+  | 'coating'
+  | 'silkscreen';
 
 /**
  * Which markup a cost takes. `none` is quirk Q4's unmarked bucket — coating

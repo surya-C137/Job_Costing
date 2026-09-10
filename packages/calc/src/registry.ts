@@ -13,7 +13,11 @@
  * `createRegistry()` with its own list rather than mutating a global.
  */
 
+import { coatingContributor, platingContributor, silkscreenContributor } from './finish.js';
+import { hardwareContributor, materialExtrasContributor } from './hardware.js';
 import { sheetMetalNestingContributor } from './material.js';
+import { nreContributor } from './nre.js';
+import { directLaborContributor, setupContributor } from './operations.js';
 import type { ModuleId } from './types/config.js';
 import type { CostContributor } from './types/contributor.js';
 
@@ -69,11 +73,28 @@ export function createRegistry(contributors: readonly CostContributor[]): Contri
 }
 
 /**
- * The modules this build ships. Sheet metal is the first trade; the list grows
- * through Tasks 1.3 and 1.4 with `sheetMetal.laser`, `sheetMetal.punch`,
- * operations, finish, hardware and NRE.
+ * The modules this build ships — the sheet-metal trade, complete.
+ *
+ * Order is the order the estimator reads them in the cost stack, and it is the
+ * order §5.6 lists: the material block, then labour, then the unmarked
+ * finishes. Nothing depends on it arithmetically.
+ *
+ * There is no `sheetMetal.laser` or `sheetMetal.punch` here. Cutting produces
+ * *hours*, not dollars (§5.4), so it reaches the stack through
+ * `sheetMetal.directLabor` — which is also what keeps quirk Q2's factor in one
+ * place instead of one copy per cutting model.
  */
-export const builtInContributors: readonly CostContributor[] = [sheetMetalNestingContributor];
+export const builtInContributors: readonly CostContributor[] = [
+  sheetMetalNestingContributor,
+  materialExtrasContributor,
+  hardwareContributor,
+  platingContributor,
+  setupContributor,
+  nreContributor,
+  directLaborContributor,
+  coatingContributor,
+  silkscreenContributor,
+];
 
 /** The registry a shop gets unless it supplies its own. */
 export const defaultRegistry: ContributorRegistry = createRegistry(builtInContributors);

@@ -283,16 +283,36 @@ export interface CoatingModel {
     sConstant: number;
   } | null;
   /**
-   * The defensible model (§11.3): coated area over coverage, times powder
-   * price, plus racking. Used when `parity.legacyCoatingModel` is off.
+   * The defensible model (§11.3), built on the powder industry's own coverage
+   * formula rather than an opaque constant:
+   *
+   * ```
+   * coverage ft²/lb = 192.3 ÷ specificGravity ÷ filmThicknessMils × transferEfficiency
+   * cost = coatedArea ft² ÷ coverage × powderPricePerLbUsd + rack + masking
+   * ```
+   *
+   * 192.3 ft² is what one pound of a specific-gravity-1.0 powder covers at
+   * 1 mil with perfect transfer; the three inputs are the ones an owner
+   * actually knows — the powder's data sheet gives specific gravity, the spec
+   * gives film build, and the booth gives transfer efficiency (50–80% typical
+   * on a first pass, higher with reclaim).
+   *
+   * Used when `parity.legacyCoatingModel` is off. Null until the owner fills
+   * it in; the workbook has no source for any of it.
    */
   modern: {
-    /** Square feet one pound of powder covers. */
-    coverageSqFtPerLb: number;
+    /** Specific gravity of the powder, from its data sheet. Typically 1.2–1.8. */
+    specificGravity: number;
+    /** Target film build, mils. Typically 2–3 for a functional finish. */
+    filmThicknessMils: number;
+    /** Fraction of sprayed powder that lands on the part, 0–1. */
+    transferEfficiency: number;
     /** Powder price, $/lb. */
     powderPricePerLbUsd: number;
     /** Hanging and racking labour, $ per part. */
     rackLaborUsdPerPart: number;
+    /** Masking labour and materials, $ per masked feature. */
+    maskingUsdPerFeature: number;
   } | null;
 }
 

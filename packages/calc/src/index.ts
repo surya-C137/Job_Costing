@@ -18,9 +18,12 @@
  *   laser.ts      feature list -> cut inches -> hrs/part    §5.2  ✔ 1.3
  *   punch.ts      hit counter -> hrs/part                   §5.3  ✔ 1.3
  *   cutting.ts    machine + rate -> hrs/part                §5.2  ✔ 1.3
- *   operations.ts setup and direct labour                   §5.4
- *   finish.ts     plating, coating, silkscreen              §5.5
- *   rollup.ts     cost stack per quantity break             §5.6
+ *   operations.ts setup and direct labour                   §5.4  ✔ 1.4
+ *   finish.ts     plating, coating, silkscreen              §5.5  ✔ 1.4
+ *   hardware.ts   bought parts and material extras          §5.6  ✔ 1.4
+ *   nre.ts        one-off engineering, amortised            §5.6  ✔ 1.4
+ *   rollup.ts     cost stack per quantity break             §5.6  ✔ 1.4
+ *   seed.ts       seed JSON -> ShopConfig                   §3    ✔ 1.4
  *   intake/       material and thickness resolvers          §8
  *   intake/dxf.ts flat-pattern geometry                     §11.4
  *
@@ -57,5 +60,11 @@ export * from './cutting.js';
 export * from './laser.js';
 export * from './material.js';
 export * from './punch.js';
+export * from './finish.js';
+export * from './hardware.js';
+export * from './nre.js';
+export * from './operations.js';
 export * from './registry.js';
+export * from './rollup.js';
+export * from './seed.js';
 export * from './units.js';

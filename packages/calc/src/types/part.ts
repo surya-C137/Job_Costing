@@ -155,6 +155,12 @@ export interface PartInput {
   finishedAreaSqIn?: number;
   nesting: NestingInput;
   cutting: CuttingInput;
+  /** §5.6 `sheet_extras` — freight-in, cut-to-size, drop charges. $ per part. */
+  materialExtrasUsd?: number;
+  /** §5.6 `setup_extra_labor` — one-off labour beyond the operations' own
+   *  setups: fixturing, first-article. $ per job, amortised over the
+   *  quantity. */
+  setupExtraLaborUsd?: number;
   operations: OperationLine[];
   finish: FinishInput;
   hardware: HardwareLine[];

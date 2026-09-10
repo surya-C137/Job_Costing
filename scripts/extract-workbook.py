@@ -70,7 +70,7 @@ BLANK_TABLE_ROWS = (233, 280)
 # scaffolding for its ×K/std formula -- so the split is assigned here and
 # recorded in docs/decisions.md. Everything else is a manual operation priced
 # as countPerPart / standardPerHr.
-MACHINE_OPS = {"laser", "pega-50-x-72", "em2510nt-60-x-98"}
+MACHINE_OPS = {"laser": "laser", "pega-50-x-72": "punch", "em2510nt-60-x-98": "punch"}
 
 # REQUIREMENTS §3 gives every operation a `standardUnit`, so the UI can label
 # the count ("bends" vs "inches of weld") and calc can validate it. The
@@ -286,6 +286,7 @@ def extract_operations(pcw: Sheet) -> list[dict]:
             "key": key,
             "name": name,
             "kind": "machine" if machine else "manual",
+            "machine_key": MACHINE_OPS.get(key),
             "setup_hrs": pcw.num(r, "D"),
             "standard_per_hr": None if machine else std,
             "standard_unit": None if machine
@@ -294,7 +295,7 @@ def extract_operations(pcw: Sheet) -> list[dict]:
             "active": True,
         })
 
-    missing = sorted(MACHINE_OPS - {row["key"] for row in rows})
+    missing = sorted(set(MACHINE_OPS) - {row["key"] for row in rows})
     assert not missing, f"MACHINE_OPS names no such operation: {missing}"
 
     note("operations", f"F{OPERATIONS_ROWS[0]}-{OPERATIONS_ROWS[1]}", "standard_unit",
@@ -464,16 +465,69 @@ def extract_blank_multiples(pcw: Sheet) -> dict:
 
 
 PRESET_NAMES = {"LASER": "Laser", "PUNCH": "Punch"}
+PRESET_TIME_MODEL = {"Laser": "featureBased", "Punch": "hitBased"}
+# Which catalog operation supplies each machine's shop rate. The workbook keeps
+# rates on the operations table, not beside the clamp/kerf pair.
+PRESET_RATE_FROM_OP = {"Laser": "laser", "Punch": "pega-50-x-72"}
 
 
-def extract_process_presets(pcw: Sheet) -> list[dict]:
-    """Clamp and kerf per cutting process.
+def recover_machine_timing(laser: Sheet) -> dict:
+    """The §5.2 timing constants, solved out of the LASER WORKSHEET.
 
-    The workbook's labels restate the clamp in the name -- "LASER, 1\" CLAMP
-    DIM" beside `clamp_in: 1.0` -- which goes stale the moment an owner edits
-    the number. The label is reduced to the process; Z (dropdown position) is
-    read only to order the rows.
+    None of these is a cell of its own -- they live inside the formulas that
+    produced B27/F29/F31/F32/F33 -- but each is recoverable from the values
+    that ARE present, because the saved quote left one pierce, one
+    intersection and a known pallet time:
+
+        intersection_s     = F31 * 3600 / F30
+        rapid_s_per_pierce = F32 * 3600 / B26
+        pallet_batch_parts = I30 / (F33 * 3600)
+        loss_factor        = F34 / (sum of the five * 100)
+
+    They are machine-row fields (REQUIREMENTS §3), so the alternative to
+    recovering them is hardcoding 0.3 / 0.6 / 100 / 1.08 in calc -- which §12
+    rule 1 forbids and §5.2 explicitly calls out.
     """
+    pierce_hrs, cut_hrs = laser.num(27, "B"), laser.num(29, "F")
+    inter_hrs, rapid_hrs, pallet_hrs = laser.num(31, "F"), laser.num(32, "F"), laser.num(33, "F")
+    pierces, intersections = laser.num(26, "B"), laser.num(30, "F")
+    pallet_sec, total_100 = laser.num(30, "I"), laser.num(34, "F")
+
+    subtotal = pierce_hrs + cut_hrs + inter_hrs + rapid_hrs + pallet_hrs
+    timing = {
+        "pallet_change_s": pallet_sec,
+        "pallet_batch_parts": round(pallet_sec / (pallet_hrs * 3600.0)),
+        "intersection_s": round(inter_hrs * 3600.0 / intersections, 6),
+        "rapid_s_per_pierce": round(rapid_hrs * 3600.0 / pierces, 6),
+        "loss_factor": round(total_100 / (subtotal * 100.0), 6),
+    }
+    note("laser worksheet", "B27/F29/F31-F33", "timing constants",
+         f"intersection {timing['intersection_s']} s, rapid "
+         f"{timing['rapid_s_per_pierce']} s/pierce, pallet batch "
+         f"{timing['pallet_batch_parts']} parts, loss factor "
+         f"{timing['loss_factor']} are solved from one saved quote that ran a "
+         f"single pierce and a single intersection. They reproduce §9 exactly, "
+         f"but a quote with more of either would confirm them independently -- "
+         f"worth checking against the Task 5.2 pilot.")
+    return timing
+
+
+def extract_process_presets(pcw: Sheet, laser: Sheet, ops: list[dict],
+                            punch: dict) -> list[dict]:
+    """The shop's cutting machines (REQUIREMENTS §3 work centres).
+
+    The workbook calls these "process presets" and stores only a clamp and a
+    kerf; §3 makes them machine rows, because a shop with two lasers needs two
+    of everything. The labels restate the clamp in the name -- "LASER, 1"
+    CLAMP DIM" beside `clamp_in: 1.0` -- which goes stale the moment an owner
+    edits the number, so the label is reduced to the process.
+
+    Task 2.1's `seed.ts` and calc's `shopConfigFromSeed()` both turn these into
+    `Machine` rows; there is no `process_presets` table.
+    """
+    timing = recover_machine_timing(laser)
+    rates = {o["key"]: o["rate_per_hr"] for o in ops}
+
     rows = []
     lo, hi = PRESET_ROWS
     for r in range(lo, hi + 1):
@@ -486,11 +540,17 @@ def extract_process_presets(pcw: Sheet) -> list[dict]:
             name = head.title()
             note("process_presets", f"AA{r}", "name",
                  f"unrecognised process label {label!r}; using {name!r}")
+
         rows.append({
             "key": slug(name),
             "name": name,
+            "kind": name.lower(),
+            "time_model": PRESET_TIME_MODEL.get(name, "none"),
+            "rate_per_hr": rates.get(PRESET_RATE_FROM_OP.get(name, ""), None),
             "clamp_in": pcw.num(r, "AB"),
             "kerf_in": pcw.num(r, "AC"),
+            "load_unload_s_per_blank": punch["load_unload_s_per_blank"],
+            **timing,
         })
     return rows
 
@@ -757,16 +817,18 @@ def main() -> int:
     laser = Sheet(book, LASER_SHEET)
     assy = Sheet(book, ASSY_SHEET)
 
+    operations = extract_operations(pcw)
+    punch_rates = extract_punch_rates(pcw)
     outputs = [
         ("materials.json", extract_materials(pcw)),
-        ("operations.json", extract_operations(pcw)),
+        ("operations.json", operations),
         ("plating.json", extract_plating(pcw)),
         ("coating.json", extract_coating(pcw)),
         ("silkscreen.json", extract_silkscreen(pcw)),
         ("assembly_standards.json", extract_assembly(assy)),
-        ("punch_rates.json", extract_punch_rates(pcw)),
+        ("punch_rates.json", punch_rates),
         ("blank_multiples.json", extract_blank_multiples(pcw)),
-        ("process_presets.json", extract_process_presets(pcw)),
+        ("process_presets.json", extract_process_presets(pcw, laser, operations, punch_rates)),
         ("shop_defaults.json", extract_shop_defaults(pcw)),
     ]
 
