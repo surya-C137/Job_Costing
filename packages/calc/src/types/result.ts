@@ -68,6 +68,14 @@ export type WarningCode =
   | 'missing-machine-material-rate'
   /** An operation's standard is missing or zero, so its hours are zero. */
   | 'missing-standard'
+  /** The part's cutting input does not match the selected machine's time
+   *  model — a punch hit counter against a laser, say (§5.2/§5.3). */
+  | 'cutting-model-mismatch'
+  /** A hit references a tool that is not on the selected machine. */
+  | 'unknown-punch-tool'
+  /** The machine-material pairing has a zero cutting speed or a zero punch
+   *  rate factor: this machine cannot work this stock (§5.3). */
+  | 'material-not-cuttable'
   /**
    * The blank does not fit the stock in either orientation (§5.1). A warning
    * rather than an error because CLAUDE.md's Design section says so: the

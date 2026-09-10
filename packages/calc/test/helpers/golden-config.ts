@@ -59,7 +59,7 @@ function machine(): Machine {
     palletChangeSec: golden.laser.pallet_change_s,
     // Not in the fixture: §5.2's stated constants. Task 1.3 pins them against
     // the laser oracle (0.0052255 h/part), which is what actually proves them.
-    palletThresholdParts: 100,
+    palletBatchParts: 100,
     intersectionSec: 0.3,
     rapidSecPerPierce: 0.6,
     lossFactor: 1.08,

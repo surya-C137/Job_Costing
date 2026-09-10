@@ -4,6 +4,77 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Task 1.3, cutting time (laser and punch)
+
+**§5.2's pallet rule did not reproduce §9, and the workbook wins.**
+The section read "pallet change 60 s ÷ parts_per_sheet (only if pps < 100)".
+For the golden part that is 60 ÷ 41.25 = 1.45 s per part, and it misses the
+laser oracle by 4.91% — 0.0054818 h/part against 0.0052255. Reading the LASER
+WORKSHEET directly settles it:
+
+```
+B27 Pierce Hours            2.7778e-05   = 1 x 0.1s / 3600
+F29 PerimeterCut Hours      4.3939e-03   = 58 / 220 / 60
+F31 Intersection Factor     8.3333e-05   = 1 x 0.3s / 3600
+F32 Rapid Factor            1.6667e-04   = 1 x 0.6s / 3600
+F33 Pallet Change Hrs/Part  1.6667e-04   = 0.6s  <- 60/100, not 60/41.25
+F34 Total per 100 w/loss    0.52254545   = sum x 108   (100 parts x 1.08 loss)
+```
+
+So the rule is: one pallet change per batch of 100, spread across that batch,
+charged only while a single sheet yields fewer than 100 parts. Both the
+threshold and the divisor are that same 100, so `Machine.palletThresholdParts`
+was renamed `palletBatchParts` and does both jobs. §5.2 was corrected; the
+engine follows the workbook, not the prose, because §9 is the oracle and the
+prose is not.
+
+*This is not certain.* `F33` is numerically identical to `F32`, so a
+copy-paste in the workbook would look the same from one saved quote, and
+Office File Block prevents reading the formula. The reading that reproduces §9
+was chosen, the ambiguity is now REQUIREMENTS §10 question 10, and the
+extractor asserts the `F33 == F32` coincidence on every run so a newer save
+that breaks the tie is noticed.
+
+**Pierces are counted per feature instance, not per feature row.**
+§5.2 says "feature count + 1"; a row of 200 holes is 200 pierces, because the
+machine stops and pierces at each one. The golden part has no internal
+features, so its single pierce cannot distinguish the readings — physics can.
+*Alternative:* count rows (rejected — it would price a 200-hole part as though
+it had one hole).
+
+**Cutting returns hours; `operations.ts` turns them into dollars.**
+§5.4 is explicit that machine ops take "hours from §5.2/§5.3 per part" and then
+apply the rate and quirk Q2's factor. So `laser.ts` and `punch.ts` are not cost
+contributors — they are time models, and Task 1.4's operations contributor is
+what registers. This keeps `machineTimeFactor` in exactly one place rather than
+duplicated across every cutting module.
+
+**`cutting.ts` resolves; `laser.ts` and `punch.ts` compute.**
+BUILD-PLAN 1.3 requires that inputs are explicit numbers and never looked up
+inside calc, and separately that a missing rate warns rather than throws. Those
+pull in opposite directions, so they are separate files: the time models take
+plain numbers and have no idea what a `ShopConfig` is, and one resolver reads
+the machine row and the machine-material rate, emits the warnings, and hands
+down numbers. It also dispatches on `Machine.timeModel`, which is what lets a
+waterjet reach the feature-based model without naming itself (§12 rule 2).
+
+**Punch model, where §5.3 is silent.** `Σ(hits × multiplier ÷ (hitsPerHr ×
+punchRateFactor)) + loadUnload ÷ partsPerBlank`, all times `lossFactor`. The
+rate factor divides rather than multiplies time — a factor below 1 means the
+stock punches more slowly. A factor of zero means the pairing cannot be punched
+at all (the workbook seeds 0 against quarter-inch plate), which is a
+`material-not-cuttable` warning rather than a division by zero. `lossFactor` is
+applied to punching as well as cutting because it is a machine property, not a
+laser one; a shop that disagrees sets 1.0 on that machine. No golden case
+covers any of this — the §9 quote ran on the laser — so it is validated against
+hand-worked cases and should be checked in the Task 5.2 pilot.
+
+**Three new warning codes**: `cutting-model-mismatch` (a hit counter against a
+laser), `unknown-punch-tool`, `material-not-cuttable`. All follow §12 rule 3 —
+zero hours plus a warning naming what is missing, never a silent default.
+
+---
+
 ## 2026-09-10 — Task 1.2, calc types, contributor registry, material module
 
 **A machine's `timeModel` decides how it is priced, not its name.**
@@ -85,7 +156,7 @@ machine numbers off the material row — is still owed. BUILD-PLAN 2.1 has
 `seed.ts` doing it, but Task 1.4's golden test runs with no database, so it needs
 the same mapping first. Write it once in 1.4 and have `seed.ts` reuse it.
 Three §5.2 constants the fixture does not carry (`intersectionSec` 0.3,
-`rapidSecPerPierce` 0.6, `palletThresholdParts` 100) are set from §5.2's stated
+`rapidSecPerPierce` 0.6, `palletBatchParts` 100) are set from §5.2's stated
 values in that helper and are pinned properly by Task 1.3's laser oracle.
 
 ---
@@ -142,7 +213,7 @@ optional area-based standard *any* operation can use. *Alternative:* special-cas
 
 **Machine constants named, not inlined.** §5.2 still had `0.3 s`, `0.6 s`, `60 s`,
 `pps < 100` and `1.08` as literals with no home. They are now machine-row fields —
-`intersectionSec`, `rapidSec`, `palletChangeSec`, `palletThresholdParts`, `lossFactor` —
+`intersectionSec`, `rapidSec`, `palletChangeSec`, `palletBatchParts`, `lossFactor` —
 listed in §3 and referenced by name in §5.2. Same for §5.1's literal 12
 (`minChargeStripIn`) and its "laser 1 in, punch 2 in" clamp (`clampStripIn`).
 A shuttle-table fiber laser has a different pallet time; a shop with better nesting software

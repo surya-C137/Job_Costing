@@ -15,8 +15,9 @@
  * Modules land here from BUILD-PLAN Task 1.2 onward:
  *   material.ts   nesting, blank cost, minimum charge      §5.1  ✔ 1.2
  *   registry.ts   module id -> cost contributor            §12   ✔ 1.2
- *   laser.ts      feature list -> cut inches -> hrs/part    §5.2
- *   punch.ts      hit counter -> hrs/part                   §5.3
+ *   laser.ts      feature list -> cut inches -> hrs/part    §5.2  ✔ 1.3
+ *   punch.ts      hit counter -> hrs/part                   §5.3  ✔ 1.3
+ *   cutting.ts    machine + rate -> hrs/part                §5.2  ✔ 1.3
  *   operations.ts setup and direct labour                   §5.4
  *   finish.ts     plating, coating, silkscreen              §5.5
  *   rollup.ts     cost stack per quantity break             §5.6
@@ -52,6 +53,9 @@ export const CALC_SCHEMA_VERSION = 1;
 
 export * from './types/index.js';
 export * from './lookup.js';
+export * from './cutting.js';
+export * from './laser.js';
 export * from './material.js';
+export * from './punch.js';
 export * from './registry.js';
 export * from './units.js';

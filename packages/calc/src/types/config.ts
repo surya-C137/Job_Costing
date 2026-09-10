@@ -157,7 +157,7 @@ export interface PunchHitRate {
  *
  * Every timing constant the workbook buried in a formula is a field here —
  * `intersectionSec`, `rapidSecPerPierce`, `palletChangeSec`,
- * `palletThresholdParts`, `lossFactor`. A shuttle-table fibre laser has a
+ * `palletBatchParts`, `lossFactor`. A shuttle-table fibre laser has a
  * different pallet time; a shop with better nesting software has a different
  * loss factor. None of them may be a literal in calc (§5.2, §12 rule 1).
  */
@@ -187,8 +187,13 @@ export interface Machine {
   kerfIn: number;
   /** Pallet or table change, seconds, amortised over the parts on a sheet. */
   palletChangeSec: number;
-  /** Pallet change only counts while parts-per-sheet is below this (§5.2). */
-  palletThresholdParts: number;
+  /**
+   * The batch a pallet change is spread over, in parts, and the sheet yield
+   * above which no change is needed inside that batch (§5.2). One number
+   * doing both jobs because the workbook uses one number for both: it charges
+   * `palletChangeSec ÷ 100` per part while a sheet yields fewer than 100.
+   */
+  palletBatchParts: number;
   /** Seconds lost per cut-path intersection (§5.2). */
   intersectionSec: number;
   /** Rapid traverse, seconds per pierce (§5.2). */
