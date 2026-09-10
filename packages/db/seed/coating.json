@@ -1,80 +1,65 @@
 {
   "models": [
     {
-      "row": 52,
-      "slot": "Coating A",
       "key": "powder-smooth-or-textured",
       "name": "Powder, Smooth or Textured",
-      "s_constant": 5.0,
-      "coverage": 100.0,
-      "rate": 0.5,
-      "observed_area_or_perimeter": 42.476,
-      "observed_cost": 1.0618999999999998,
-      "observed_vpf": 0.21237999999999999
+      "legacy": {
+        "s_constant": 5.0,
+        "coverage": 100.0,
+        "rate": 0.5
+      },
+      "modern": null
     },
     {
-      "row": 54,
-      "slot": "Coating B",
       "key": "liquid-smooth",
       "name": "Liquid, Smooth",
-      "s_constant": null,
-      "coverage": 75.0,
-      "rate": 0.0,
-      "observed_area_or_perimeter": 0.7301391666666667,
-      "observed_cost": 0.0,
-      "observed_vpf": 0.0
+      "legacy": {
+        "s_constant": null,
+        "coverage": 75.0,
+        "rate": 0.0
+      },
+      "modern": null
     },
     {
-      "row": 56,
-      "slot": "Coating C",
       "key": "liquid-textured",
       "name": "Liquid, Textured",
-      "s_constant": null,
-      "coverage": 60.0,
-      "rate": 0.0,
-      "observed_area_or_perimeter": 0.7301391666666667,
-      "observed_cost": 0.0,
-      "observed_vpf": 0.0
+      "legacy": {
+        "s_constant": null,
+        "coverage": 60.0,
+        "rate": 0.0
+      },
+      "modern": null
     }
   ],
   "adders": {
     "plugs-caps-pems-studs-etc": {
-      "row": 58,
       "label": "Plugs & Caps (Pems, Studs, etc)",
       "rate": 0.05
     },
     "fill-prep-pems-studs-etc": {
-      "row": 59,
       "label": "Fill & Prep (Pems Studs, etc)",
       "rate": 0.25
     },
     "masking-dots": {
-      "row": 60,
       "label": "Masking Dots",
       "rate": 0.05
     },
     "mask-time-minutes-each": {
-      "row": 61,
       "label": "Mask Time (minutes each)",
       "rate": 25.0
     },
     "demask-time-minutes-each": {
-      "row": 62,
       "label": "Demask Time (minutes each)",
       "rate": 25.0
     },
     "parts-per-hook-600-180": {
-      "row": 63,
       "label": "Parts Per Hook ($600/180)",
       "rate": 3.3333333333333335
     },
     "part-per-hanger-600-90": {
-      "row": 64,
       "label": "Part Per Hanger ($600/90)",
       "rate": 6.666666666666667
     }
   },
-  "liquid_texture_adder_pct": 0.5,
-  "observed_sub_total": 1.0618999999999998,
-  "observed_minimum_rate": 1.0618999999999998
+  "liquid_texture_adder_pct": 0.5
 }

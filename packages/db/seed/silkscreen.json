@@ -1,7 +1,5 @@
 [
   {
-    "item": 1,
-    "row": 215,
     "key": "no-screen-print",
     "spec": "NO SCREEN PRINT",
     "screen_cost": 0.0,
@@ -9,8 +7,6 @@
     "active": true
   },
   {
-    "item": 2,
-    "row": 216,
     "key": "screen-price-0-50",
     "spec": "SCREEN PRICE $0.50",
     "screen_cost": 75.0,
@@ -18,8 +14,6 @@
     "active": true
   },
   {
-    "item": 3,
-    "row": 217,
     "key": "screen-price-0-60",
     "spec": "SCREEN PRICE $0.60",
     "screen_cost": 80.0,
@@ -27,8 +21,6 @@
     "active": true
   },
   {
-    "item": 4,
-    "row": 218,
     "key": "screen-price-0-75",
     "spec": "SCREEN PRICE $0.75",
     "screen_cost": 85.0,
@@ -36,8 +28,6 @@
     "active": true
   },
   {
-    "item": 5,
-    "row": 219,
     "key": "screen-price-1-00",
     "spec": "SCREEN PRICE $1.00",
     "screen_cost": 90.0,
@@ -45,8 +35,6 @@
     "active": true
   },
   {
-    "item": 6,
-    "row": 220,
     "key": "screen-price-1-25",
     "spec": "SCREEN PRICE $1.25",
     "screen_cost": 100.0,
@@ -54,8 +42,6 @@
     "active": true
   },
   {
-    "item": 7,
-    "row": 221,
     "key": "screen-price-customer",
     "spec": "SCREEN PRICE CUSTOMER",
     "screen_cost": null,

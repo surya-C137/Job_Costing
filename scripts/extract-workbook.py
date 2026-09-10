@@ -14,6 +14,14 @@ formulas are not available. Where a constant lives only inside a formula
 values that ARE present, and tagged `"source": "derived"` so the provenance
 is never mistaken for a cell read.
 
+What is emitted is deliberately narrower than what is read. The workbook is a
+record of how this shop thinks about cost, seed data the owner overwrites, and
+a validation oracle for the REQUIREMENTS §9 selling prices -- it is not a
+specification to mirror. So spreadsheet residue is read where it helps the
+extraction and then dropped: index numbers, source rows, helper columns, and
+the columns that hold whatever quote happened to be loaded when the file was
+last saved. See docs/course-correction.md.
+
 BUILD-PLAN Task 0.2. Run from the repo root:  python scripts/extract-workbook.py
 """
 
@@ -55,6 +63,20 @@ PUNCH_ROWS = (32, 43)         # tool name in P, hit rate in V
 COATING_ROWS = (52, 67)
 PRESET_ROWS = (282, 283)      # BUILD-PLAN said 281-282; 281 is the header
 BLANK_TABLE_ROWS = (233, 280)
+
+# Operations whose hours come from a cutting worksheet (§5.2/§5.3) rather than
+# from a parts-per-hour standard: one laser and two turret punches. The
+# workbook has no such column -- it encodes the distinction as `std = 100`
+# scaffolding for its ×K/std formula -- so the split is assigned here and
+# recorded in docs/decisions.md. Everything else is a manual operation priced
+# as countPerPart / standardPerHr.
+MACHINE_OPS = {"laser", "pega-50-x-72", "em2510nt-60-x-98"}
+
+# REQUIREMENTS §3 gives every operation a `standardUnit`, so the UI can label
+# the count ("bends" vs "inches of weld") and calc can validate it. The
+# workbook has no such column -- its standards are bare numbers -- so the two
+# linear operations are named here and everything else counts pieces.
+INCH_STANDARD_OPS = {"weld", "grind"}
 
 unresolved: list[dict] = []
 
@@ -175,6 +197,12 @@ def extract_materials(pcw: Sheet) -> list[dict]:
     U/V reproduces R -- elsewhere in the table those two columns hold
     unrelated scratch values (row 145 puts thickness and steel density there),
     so they are accepted only when the arithmetic checks out.
+
+    Read but not emitted: B (the workbook's index number -- rows are addressed
+    by key), H (laser lens size, a machine attribute filed under material),
+    and I/J/K (the metric speeds L was derived from). Keeping a derivation's
+    inputs beside its output invites the two to disagree the first time an
+    owner edits a speed in Settings; L is the number the engine uses.
     """
     rows = []
     lo, hi = MATERIALS_ROWS
@@ -199,8 +227,6 @@ def extract_materials(pcw: Sheet) -> list[dict]:
                  f"no thickness in name {name!r}; workbook has no thickness column")
 
         rows.append({
-            "item": int(pcw.num(r, "B") or 0),
-            "row": r,
             "key": slug(name),
             "name": name,
             "family": parse_family(name),
@@ -211,10 +237,6 @@ def extract_materials(pcw: Sheet) -> list[dict]:
             "speed_in_min": pcw.num(r, "L"),
             "pierce_s": pcw.num(r, "P"),
             "punch_rate_factor": pcw.num(r, "T"),
-            "optics_in": pcw.num(r, "H"),
-            "speed_max_m_min": pcw.num(r, "I"),
-            "speed_min_m_min": pcw.num(r, "J"),
-            "speed_avg_m_min": pcw.num(r, "K"),
             "sheet_cost": sheet_cost,
             "sheet_lbs": sheet_lbs,
             "active": True,
@@ -229,25 +251,25 @@ def extract_operations(pcw: Sheet) -> list[dict]:
     E/G/I/J/K/L belong to whatever quote is loaded in the sheet -- right now
     that is the golden part -- so they are NOT seed data and are skipped.
 
-    `k_factor_observed` is the ×60 / ×100 rule of REQUIREMENTS §5.4 (quirk Q2)
-    recovered from arithmetic rather than assumed: where the loaded quote left
-    both oper-hours (E) and hrs-per-100 (G) non-zero, K = G * F / E. Only the
-    laser row qualifies in this save, and it yields exactly 60. Every other row
-    gets null; §10 question 1 has to settle them.
+    F (the workbook's "standard") is emitted as `standard_per_hr` for manual
+    operations, where it is a real rate -- 222 bends/hr, 200 in/hr of weld. For
+    the machine operations in MACHINE_OPS it is scaffolding that exists so the
+    ×K/std formula resolves (laser 100, Pega 0), so it is emitted as null and
+    their hours come from the cutting worksheet instead.
+
+    The ×60 rule of REQUIREMENTS §5.4 (quirk Q2) is NOT emitted per row. It was
+    recovered here as K = G * F / E = 60 on the laser row, but 60/100 is a
+    property of the pricing rule, not of any operation: it survives as the
+    single `parity.machineTimeFactor` of 0.6. See docs/course-correction.md §2.3.
     """
-    rows, seen, unobserved = [], {}, []
+    rows, seen, dropped_std = [], {}, []
     lo, hi = OPERATIONS_ROWS
     for r in range(lo, hi + 1):
         name = pcw.text(r, "C")
         if not name:
             continue
 
-        std, oper_hrs, hrs100 = pcw.num(r, "F"), pcw.num(r, "E"), pcw.num(r, "G")
-        k = None
-        if oper_hrs and hrs100 and std:
-            k = round(hrs100 * std / oper_hrs, 6)
-        else:
-            unobserved.append(f"{name} (C{r})")
+        std = pcw.num(r, "F")
 
         # BRAKE, BEND appears twice (222/hr and 330/hr). Keep both, but make
         # the key unique so downstream tables can address them.
@@ -256,24 +278,43 @@ def extract_operations(pcw: Sheet) -> list[dict]:
         if seen[key] > 1:
             key = f"{key}-{int(std) if std else seen[key]}"
 
+        machine = key in MACHINE_OPS
+        if machine and std:
+            dropped_std.append(f"{name} (F{r} = {std:g})")
+
         rows.append({
-            "row": r,
             "key": key,
             "name": name,
+            "kind": "machine" if machine else "manual",
             "setup_hrs": pcw.num(r, "D"),
-            "std": std,
+            "standard_per_hr": None if machine else std,
+            "standard_unit": None if machine
+                             else ("inches" if key in INCH_STANDARD_OPS else "pieces"),
             "rate_per_hr": pcw.num(r, "H"),
-            "k_factor_observed": k,
             "active": True,
         })
 
-    if unobserved:
-        note("operations", f"E/G {OPERATIONS_ROWS[0]}-{OPERATIONS_ROWS[1]}",
-             "k_factor_observed",
-             f"{len(unobserved)} of {len(rows)} operations sat idle in the saved "
-             f"quote, so their ×60-vs-×100 factor cannot be observed and is null. "
-             f"Only LASER was running. Settle with REQUIREMENTS §10 q1, then set "
-             f"the rest. Affected: {', '.join(unobserved)}")
+    missing = sorted(MACHINE_OPS - {row["key"] for row in rows})
+    assert not missing, f"MACHINE_OPS names no such operation: {missing}"
+
+    note("operations", f"F{OPERATIONS_ROWS[0]}-{OPERATIONS_ROWS[1]}", "standard_unit",
+         "the workbook records standards as bare numbers with no unit. WELD and "
+         "GRIND are seeded as `inches` (both carry 200 in column F, and "
+         "REQUIREMENTS §6 notes 120 in/hr for each -- which of the two the 200 "
+         "is has to come from the estimator); every other manual row is "
+         "`pieces`. Confirm with §10 q1.")
+
+    note("operations", f"F{OPERATIONS_ROWS[0]}-{OPERATIONS_ROWS[1]}", "kind",
+         "machine-vs-manual is not a column in the workbook; it is asserted by "
+         "the extractor (MACHINE_OPS = laser, Pega, EM2510NT) and needs an "
+         "owner confirmation alongside REQUIREMENTS §10 q1. EM2510NT and 30-30 "
+         "are the uncertain two: EM2510NT is treated as a turret punch, 30-30 "
+         "as a manual operation on its 250/hr standard.")
+    if dropped_std:
+        note("operations", f"F{OPERATIONS_ROWS[0]}-{OPERATIONS_ROWS[1]}",
+             "standard_per_hr",
+             "dropped as machine-op scaffolding (hours come from the cutting "
+             "worksheet, not a per-hour standard): " + ", ".join(dropped_std))
     return rows
 
 
@@ -285,8 +326,6 @@ def extract_plating(pcw: Sheet) -> list[dict]:
         if not spec:
             continue  # numbered-but-blank rows (81, 84, 86, 91, 96, 100, 102, 115)
         rows.append({
-            "item": int(pcw.num(r, "B") or 0),
-            "row": r,
             "key": slug(spec),
             "spec": spec,
             "lot_min_charge": pcw.num(r, "I"),
@@ -309,8 +348,6 @@ def extract_silkscreen(pcw: Sheet) -> list[dict]:
             note("silkscreen", f"F{r}", "screen_cost",
                  f"{spec}: screen cost blank (customer-supplied screen)")
         rows.append({
-            "item": int(pcw.num(r, "B") or 0),
-            "row": r,
             "key": slug(spec),
             "spec": spec,
             "screen_cost": screen,
@@ -329,43 +366,49 @@ def extract_coating(pcw: Sheet) -> dict:
 
         cost = U * (V / T * S) = 0.5 * (42.476 / 100 * 5) = 1.0619
 
-    where V is the part perimeter, not an area. Constants are carried through
-    verbatim under the workbook's own labels; naming them correctly is blocked
-    on REQUIREMENTS §10 question 2.
+    where V is the part perimeter, not an area. The three constants are carried
+    through verbatim but nested under `legacy`, so nothing mistakes them for
+    physics: they are quirk Q3's parameters and naming them correctly is
+    blocked on REQUIREMENTS §10 question 2. The §11.3 `modern` model has no
+    source in the workbook and is left for Settings.
+
+    Columns V/W/X hold the loaded quote's own coating cost (1.0619 for the §9
+    part), not seed data, and are not emitted.
     """
     models = []
-    for r, label in ((52, "Coating A"), (54, "Coating B"), (56, "Coating C")):
+    for r in (52, 54, 56):
         name = pcw.text(r, "P")
         if not name:
             continue
         models.append({
-            "row": r,
-            "slot": label,
             "key": slug(name),
             "name": name,
-            "s_constant": pcw.num(r, "S"),
-            "coverage": pcw.num(r, "T"),
-            "rate": pcw.num(r, "U"),
-            "observed_area_or_perimeter": pcw.num(r, "V"),
-            "observed_cost": pcw.num(r, "W"),
-            "observed_vpf": pcw.num(r, "X"),
+            "legacy": {
+                "s_constant": pcw.num(r, "S"),
+                "coverage": pcw.num(r, "T"),
+                "rate": pcw.num(r, "U"),
+            },
+            "modern": None,
         })
     note("coating", "S52/T52/U52", "s_constant/coverage/rate",
          "constants 5 / 100 / 0.5 are unexplained and column U is mislabelled "
          "'# Sides' while acting as a rate; REQUIREMENTS §10 q2")
 
+    note("coating", "(none)", "minimum_charge_usd",
+         "CoatingModel.minimumChargeUsd has no source: W67 holds the loaded "
+         "quote's own cost (1.0619), not a floor. Left unset until the owner "
+         "gives a real minimum, alongside REQUIREMENTS §10 q2.")
+
     adders = {}
     for r in range(58, 65):
         label = pcw.text(r, "P")
         if label:
-            adders[slug(label)] = {"row": r, "label": label, "rate": pcw.num(r, "U")}
+            adders[slug(label)] = {"label": label, "rate": pcw.num(r, "U")}
 
     return {
         "models": models,
         "adders": adders,
         "liquid_texture_adder_pct": 0.5,  # REQUIREMENTS §5.5; not a cell
-        "observed_sub_total": pcw.num(65, "W"),
-        "observed_minimum_rate": pcw.num(67, "W"),
     }
 
 
@@ -376,8 +419,12 @@ def extract_punch_rates(pcw: Sheet) -> dict:
         name = pcw.text(r, "P")
         if not name or name.upper().startswith(("SHEETS FOR", "LOAD", "HIT DENSITY")):
             continue
+        # "TOTAL HIT COUNT" sits between TAP and Relief with a 6000/hr rate: a
+        # spreadsheet subtotal row, not a tool. REQUIREMENTS §5.3 lists it
+        # among the rates, which is the same transcription error one level up.
+        if name.upper().startswith("TOTAL HIT"):
+            continue
         tools.append({
-            "row": r,
             "key": slug(name),
             "name": name,
             "multiplier": pcw.num(r, "U"),
@@ -386,12 +433,18 @@ def extract_punch_rates(pcw: Sheet) -> dict:
     return {
         "tools": tools,
         "load_unload_s_per_blank": pcw.num(45, "S"),
-        "observed_sheets_for_100": pcw.num(44, "S"),
-        "observed_hit_density_per_sq_ft": pcw.num(47, "S"),
     }
 
 
 def extract_blank_multiples(pcw: Sheet) -> dict:
+    """The standard blank lengths a shop can buy, and the stock widths.
+
+    This is the *list* -- the 48-row precomputed yield grid beside it is Excel
+    working out `parts_per_blank` for every combination, which the engine does
+    on demand. K also carries each width's clamp-subtracted twin (35/36, 47/48,
+    59/60); clamp subtraction is one line of arithmetic, so only the nominal
+    widths are emitted.
+    """
     lo, hi = BLANK_TABLE_ROWS
     mults, widths = set(), set()
     for r in range(lo, hi + 1):
@@ -405,22 +458,35 @@ def extract_blank_multiples(pcw: Sheet) -> dict:
     # 48/47, 60/59). The nominal widths are the larger of each adjacent pair.
     nominal = sorted(w for w in widths if (w + 1) not in widths)
     return {
-        "multiples_in": sorted(mults),
+        "standard_blank_lengths_in": sorted(mults),
         "sheet_widths_in": nominal,
-        "clamp_subtracted_widths_in": sorted(widths),
     }
 
 
+PRESET_NAMES = {"LASER": "Laser", "PUNCH": "Punch"}
+
+
 def extract_process_presets(pcw: Sheet) -> list[dict]:
+    """Clamp and kerf per cutting process.
+
+    The workbook's labels restate the clamp in the name -- "LASER, 1\" CLAMP
+    DIM" beside `clamp_in: 1.0` -- which goes stale the moment an owner edits
+    the number. The label is reduced to the process; Z (dropdown position) is
+    read only to order the rows.
+    """
     rows = []
     lo, hi = PRESET_ROWS
     for r in range(lo, hi + 1):
-        name = pcw.text(r, "AA")
-        if not name:
+        label = pcw.text(r, "AA")
+        if not label:
             continue
+        head = label.split(",")[0].strip().upper()
+        name = PRESET_NAMES.get(head)
+        if name is None:
+            name = head.title()
+            note("process_presets", f"AA{r}", "name",
+                 f"unrecognised process label {label!r}; using {name!r}")
         rows.append({
-            "row": r,
-            "index": int(pcw.num(r, "Z") or 0),
             "key": slug(name),
             "name": name,
             "clamp_in": pcw.num(r, "AB"),
@@ -474,16 +540,30 @@ def extract_shop_defaults(pcw: Sheet) -> dict:
              "12-inch strip is embedded in the min-charge formula; Office File "
              "Block prevents reading formulas, so it was solved arithmetically")
     else:
-        strip = round(strip)
+        strip = int(round(strip))
+
+    # D13 ($20) is NOT a shop default: it equals the sum of the per-operation
+    # fixed-dollar column, and the laser's only setup (0.2 h x $100) accounts
+    # for all of it. Seeding it as a flat $20 would double-count against
+    # REQUIREMENTS §5.6's setup roll-up and miss every §9 price. The flat
+    # per-job adder is a real (optional) setting, so it is emitted at zero.
+    setup_dollars = 0.2 * 100.0
+    if abs((pcw.num(13, "D") or 0) - setup_dollars) > 1e-6:
+        note("shop_defaults", "D13", "shop_fixed_cost_per_job",
+             f"D13 = {pcw.num(13, 'D')} no longer equals the setup roll-up "
+             f"({setup_dollars}); the assumption that D13 is a sum rather than "
+             f"a typed-in constant needs rechecking against REQUIREMENTS §5.6")
 
     return {
-        "fixed_cost_per_job": pcw.num(13, "D"),
+        "shop_fixed_cost_per_job": 0.0,
         "labor_markup": pcw.num(10, "C"),
         "material_markup": pcw.num(10, "D"),
         "nre_rate_per_hr": pcw.num(24, "E"),
         "nre_markup": pcw.num(24, "K"),
-        "min_charge_strip_in": {"value": strip, "source": "derived",
-                                "from": "W7 / (V7, Q170, R170)"},
+        # Solved, not read (see the docstring) -- but the provenance belongs in
+        # the extractor and docs/decisions.md, not in a config value the owner
+        # edits in Settings.
+        "min_charge_strip_in": strip,
         "default_qty_breaks": [int(b) for b in breaks if b],
         "sheet_widths_in": [36, 48, 60],
     }
@@ -492,24 +572,32 @@ def extract_shop_defaults(pcw: Sheet) -> dict:
 def extract_golden(pcw: Sheet, laser: Sheet) -> dict:
     """The REQUIREMENTS §9 fixture, read from cached values.
 
-    Every figure carries the cell it came from so a mismatch in Task 1.4 can be
-    traced back to the sheet instead of argued about. Blank cost is the one
-    exception: §9 quotes 68.83 but no cell holds it, so it is reconstructed
-    from the sheet geometry and marked derived.
+    The oracle is deliberately small: the six selling prices, the six material
+    percentages, and five named intermediates. Everything else here is an
+    *input* -- what the engine needs to reproduce the case. The workbook's own
+    intermediate columns (hours per 100, parts per sheet, sheets to make 100,
+    the cost-stack rows) are not emitted, because a test that pins them is
+    testing Excel's arithmetic rather than ours. See docs/course-correction.md
+    §1.2 for the row-by-row audit.
+
+    Blank cost is the one intermediate no cell holds: §9 quotes 68.83, so it is
+    reconstructed from the sheet geometry.
     """
     width, blank_len = pcw.num(7, "V"), pcw.num(5, "T")
     lb_ft2, ppl = pcw.num(170, "Q"), pcw.num(170, "R")
     blank_cost = round((width * blank_len / 144.0) * lb_ft2 * ppl, 6)
+    laser_hrs_100 = laser.num(34, "F")
 
     return {
         "_comment": (
             "Generated by scripts/extract-workbook.py from "
             "docs/reference/Quote_Metal_Cost.xls. REQUIREMENTS §9. "
-            "Do not hand-edit: if a calc test disagrees, fix the engine."
+            "Do not hand-edit: if a calc test disagrees, fix the engine. "
+            "Assert only `expected` and `intermediates`; everything else is "
+            "input. Do not add assertions on other workbook numbers."
         ),
         "generated": date.today().isoformat(),
         "material": {
-            "cell": "C170",
             "name": pcw.text(170, "C"),
             "lb_per_sq_ft": lb_ft2,
             "price_per_lb": ppl,
@@ -524,13 +612,12 @@ def extract_golden(pcw: Sheet, laser: Sheet) -> dict:
             "blank_lbs": pcw.num(3, "W"),
         },
         "nesting": {
-            "process": pcw.text(283, "AA") if pcw.num(5, "Q") == 2 else pcw.text(282, "AA"),
+            "process": "Punch" if pcw.num(5, "Q") == 2 else "Laser",
             "clamp_in": pcw.num(7, "P"),
             "kerf_in": pcw.num(7, "Q"),
             "stock_width_in": width,
             "blank_length_in": blank_len,
             "parts_per_blank": pcw.num(5, "U"),
-            "blanks_per_sheet": pcw.num(7, "T"),
         },
         "laser": {
             "perimeter_cut_in": laser.num(28, "F"),
@@ -538,48 +625,45 @@ def extract_golden(pcw: Sheet, laser: Sheet) -> dict:
             "intersections": laser.num(30, "F"),
             "speed_in_min": laser.num(23, "I"),
             "pierce_s": laser.num(21, "I"),
-            "parts_per_blank": laser.num(26, "I"),
-            "parts_per_sheet": laser.num(28, "I"),
-            "sheets_to_make_100": laser.num(29, "I"),
             "pallet_change_s": laser.num(30, "I"),
-            "hrs_per_100_with_loss": laser.num(34, "F"),
         },
         "laser_op": {
             "setup_hrs": pcw.num(33, "D"),
             "rate_per_hr": pcw.num(33, "H"),
             "fixed_dollars": pcw.num(33, "I"),
-            "oper_hrs": pcw.num(33, "E"),
-            "std": pcw.num(33, "F"),
-            "hrs_per_100": pcw.num(33, "G"),
-            "direct_per_part": pcw.num(52, "J"),
-            "k_factor_observed": round(
-                pcw.num(33, "G") * pcw.num(33, "F") / pcw.num(33, "E"), 6),
         },
         "coating": {
             "perimeter_in": pcw.num(52, "V"),
-            "cost_per_part": pcw.num(52, "W"),
-            "minimum_rate": pcw.num(67, "W"),
         },
         "config": {
-            "fixed_cost_per_job": pcw.num(13, "D"),
+            "_note": (
+                "Fixed cost for this quote is the setup roll-up -- the laser's "
+                "0.2 h x $100 = $20, carried in laser_op.fixed_dollars -- not a "
+                "shop constant (REQUIREMENTS §5.6). The workbook's D13 = 20 is "
+                "that same sum, so the flat per-job adder here is 0."
+            ),
+            "shop_fixed_cost_per_job": 0.0,
             "labor_markup": pcw.num(10, "C"),
             "material_markup": pcw.num(10, "D"),
             "nre_total": pcw.num(24, "L"),
         },
         "intermediates": {
-            "blank_cost": {"value": blank_cost, "source": "derived",
-                           "from": "(V7 * T5 / 144) * Q170 * R170"},
-            "min_charge": {"value": pcw.num(7, "W"), "cell": "W7"},
-            "material_per_part": {"value": pcw.num(16, "D"), "cell": "D16"},
+            "_note": (
+                "The five numbers the engine is held to besides `expected`. "
+                "laser_hours_per_part is the workbook's %.6f hours per 100 "
+                "divided by 100: same quantity, engine units (§11.4 makes "
+                "per-100 a display convention, not a representation)."
+            ) % laser_hrs_100,
+            "blank_cost": blank_cost,
+            "min_charge": pcw.num(7, "W"),
+            "material_per_part": pcw.num(16, "D"),
+            "material_at_qty_1": pcw.num(16, "E"),
+            "laser_hours_per_part": laser_hrs_100 / 100.0,
         },
         "quantity_breaks": [int(pcw.num(12, c)) for c in ("E", "F", "G", "H", "I", "J")],
         "expected": {
             "selling_price": [pcw.num(r, "I") for r in range(5, 11)],
             "material_pct_of_selling": [pcw.num(r, "L") for r in range(5, 11)],
-            "sheet_material": [pcw.num(16, c) for c in ("E", "F", "G", "H", "I", "J")],
-            "fixed_cost": [pcw.num(13, c) for c in ("E", "F", "G", "H", "I", "J")],
-            "direct_labor": [pcw.num(14, c) for c in ("E", "F", "G", "H", "I", "J")],
-            "painting": [pcw.num(20, c) for c in ("E", "F", "G", "H", "I", "J")],
         },
         "tolerance": {"selling_price": 0.005, "material_pct_of_selling": 0.001},
     }
@@ -691,9 +775,30 @@ def main() -> int:
         ok &= good
         print(f"{qty:>5} {exp:>12.4f} {act:>12.5f}  {'ok' if good else 'MISMATCH'}")
 
-    k = golden["laser_op"]["k_factor_observed"]
-    print(f"\nQuirk Q2 machine-op factor observed from D33/E33/F33/G33: {k}")
-    print(f"Quirk Q5 laser kerf: {golden['nesting']['kerf_in']}")
+    # The five named intermediates (docs/course-correction.md §3) are part of
+    # the oracle, so a drifting workbook trips this too, not just the prices.
+    inter = golden["intermediates"]
+    expected_inter = {
+        "blank_cost": 68.8358,
+        "min_charge": 8.6045,
+        "material_per_part": 2.0859,
+        "material_at_qty_1": 10.3254,
+        "laser_hours_per_part": 0.0052255,
+    }
+    print()
+    print("Golden intermediates")
+    for field, exp in expected_inter.items():
+        act = inter[field]
+        good = act is not None and abs(act - exp) <= 0.0001
+        ok &= good
+        print(f"{field:>22} {exp:>12.4f} {act:>14.6f}  {'ok' if good else 'MISMATCH'}")
+
+    k = round(pcw.num(33, "G") * pcw.num(33, "F") / pcw.num(33, "E"), 6)
+    print()
+    print(f"Quirk Q2 machine-op factor, observed G33*F33/E33 = {k:g} "
+          f"-> parity.machineTimeFactor {k / 100:g}")
+    print(f"Laser kerf -> Machine.kerfIn, a Settings field (Q5 withdrawn): "
+          f"{golden['nesting']['kerf_in']}")
 
     if unresolved:
         print(f"\n{len(unresolved)} unresolved cell(s) -> docs/discovery.md")
@@ -702,7 +807,7 @@ def main() -> int:
         if len(unresolved) > 6:
             print(f"  ... and {len(unresolved) - 6} more")
 
-    print("\nOK" if ok else "\nFAILED: golden prices do not match REQUIREMENTS §9")
+    print("\nOK" if ok else "\nFAILED: golden oracle does not match REQUIREMENTS §9")
     return 0 if ok else 1
 
 
