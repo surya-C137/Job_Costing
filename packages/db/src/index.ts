@@ -22,12 +22,13 @@
  *   seed.ts         `npm run db:seed`, the workbook shop                  ✔ 2.1
  *   seed-blank.ts   `npm run db:seed-blank`, a shop with no workbook      ✔ 2.1
  *   password.ts     PHC-format password hashing                  §4 FR-6  ✔ 2.1
- *   config.ts       loadShopConfig(db, shopId, asOf) / saveSnapshot()       2.2
+ *   config.ts       rows -> ShopConfig, and quote snapshots        §7     ✔ 2.2
  */
 
 export { CALC_SCHEMA_VERSION } from '@shopquote/calc';
 
 export * as schema from './schema.js';
+export * from './config.js';
 export * from './db.js';
 export * from './migrate.js';
 export * from './password.js';

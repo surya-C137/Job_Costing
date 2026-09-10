@@ -4,6 +4,72 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Task 2.2, config assembly and quote snapshots
+
+The golden case prices through the database: `packages/db/test/golden.test.ts`
+seeds a shop, loads the config back out and reproduces §9's six selling prices,
+six material percentages and the intermediates that survive a round trip.
+
+**The round trip is asserted directly, not just implied by the prices.**
+`config.test.ts` builds the same `ShopConfig` two ways — `shopConfigFromSeed()`
+in memory, and seed-then-`loadShopConfig()` — canonicalises both by replacing
+ids with names, and compares them entity for entity. That is the test that
+would catch a field quietly dropped on the way in or out; the golden test only
+exercises the handful of rows the §9 part touches, and a catalog can be wrong
+in 79 materials while pricing the eightieth perfectly. Both seeders are covered,
+because the blank shop is the only one with gauge rows and aliases in it.
+
+**Ids can never round-trip, so names are what the comparison uses.** §7 issues
+ULIDs on the way in. Names are what the estimator picks by and what an exported
+config JSON identifies a row by, so a rename showing up as a difference is
+correct rather than noise. The same reasoning decides the test's one other
+tolerance: alias arrays are sorted before comparing, because an alias list is a
+set and `loadShopConfig()` returns it sorted, while a hand-written config
+declares it in whatever order read best.
+
+**`asOf` is the whole point of versioned prices.** `loadShopConfig(db, shopId)`
+gives today's rates; `loadShopConfig(db, shopId, quote.quoteDate)` gives the
+ones a quote was written against. A same-day tie — the owner fat-fingers a price
+and re-enters it that afternoon — breaks on the row written last. A material
+with no version on or before `asOf` comes back with `pricePerLbUsd: null`, which
+is the same null the seed writes for stock that was never priced, and the
+material module warns rather than costing it (§12 rule 3).
+
+**Archived is invisible; inactive is not.** Soft delete (§7) means a removed
+row still exists for the quotes that used it, so `loadShopConfig()` filters
+`archived_at` everywhere — but `active: false` travels through, because an
+inactive material is still quotable with an amber note (`material-inactive`),
+which is a different thing from a deleted one.
+
+**A model group is configured or it is not.** The coating `legacy_*` and
+`modern_*` column groups come back as `null` unless every column in the group is
+set. A half-filled group would price off whichever constants happened to be
+there, which is precisely the `else → 0` hole §11.3 forbids for a parity flag's
+off-path. Two tests pin it: the modern parameters survive the round trip once an
+owner enters them, and a lone specific gravity leaves the model unconfigured.
+
+**Snapshots: one config row per distinct config, referenced by hash.**
+`saveSnapshot()` writes the version, the input and the result every time, but
+stores the `ShopConfig` once per distinct config — `canonicalJson()` sorts object
+keys (arrays keep their order; order in an array is data), SHA-256 addresses it.
+Twenty autosaves against untouched Settings write twenty versions and one
+snapshot row; changing a rate writes the next. The arithmetic behind that is in
+the Task 2.1 entry. Whole thing is one transaction, so a version can never point
+at a snapshot that is not there and `quotes.current_version_no` can never
+disagree with the versions that exist.
+
+**`loadSnapshot()` was not in the task, and a snapshot you cannot read is not a
+snapshot.** Fifteen lines, and it is what makes §7's "re-pricing is explicit"
+testable rather than a sentence: the test reopens a version priced at a 1.2
+material markup after Settings has moved to 1.6 and gets the old price back.
+
+**`loadShopConfig` takes the Drizzle handle, `saveSnapshot` takes ours.**
+BUILD-PLAN 2.2 writes `loadShopConfig(db, ...)`, and reading really does need
+nothing more — which also means it works unchanged inside a transaction. Saving
+needs the raw connection to open one, so it takes the `DatabaseHandle`.
+
+---
+
 ## 2026-09-10 — Task 2.1, schema, migrations and the two seed loaders
 
 `npm run db:migrate && npm run db:seed` produces `data/shopquote.db` with 80
