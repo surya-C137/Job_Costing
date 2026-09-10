@@ -104,7 +104,7 @@ Sit with the estimator for an hour with the workbook open. Record answers in `do
 
 ### 4.2 Settings screens ⏱ 1.5 h
 *Prompt to Claude:*
-> Read REQUIREMENTS FR-1. Build Settings: Shop (defaults, markups, breaks, min strip, terms, logo upload), Materials (searchable table, inline edit, "new price" dialog with effective date, price history drawer, active toggle), Operations, Plating, Coating, Silkscreen, Assembly standards, Process presets, Parity flags (with the explanation text from §5.7 next to each), Config export/import, Users. Every table: sort, filter, keyboard-friendly. Owner/admin only; estimator sees read-only.
+> Read REQUIREMENTS FR-1 and §11.2 (add $/cwt entry, assist-gas rate, RoHS flag on plating specs, surcharge %). Build Settings: Shop (defaults, markups, breaks, min strip, terms, logo upload), Materials (searchable table, inline edit, "new price" dialog with effective date, price history drawer, active toggle), Operations, Plating, Coating, Silkscreen, Assembly standards, Process presets, Parity flags (with the explanation text from §5.7 next to each), Config export/import, Users. Every table: sort, filter, keyboard-friendly. Owner/admin only; estimator sees read-only.
 
 ✅ Change CRS $/lb → save → material history shows two versions → export JSON contains both.
 
@@ -119,6 +119,12 @@ Sit with the estimator for an hour with the workbook open. Record answers in `do
 > Read FR-3 and the prototype's drop zone, parts table and drawing review cards. On the Quote page add "Add parts from file": drop CSV or PDFs; CSV → preview table with per-row notes → confirm → lines. PDF → one review card per page (pdf.js text layer + thumbnail; fields tagged found/guess/missing; "Read with AI" button calling `/api/read-drawing`; "Show text"); confirm → line with the PDF attached. Scans show the no-text-layer message.
 
 ✅ Drop the four sample PDFs: three read correctly, the scan says so; sample CSV creates four lines.
+
+### 4.4b DXF flat-pattern import ⏱ 2 h
+*Prompt to Claude:*
+> Read REQUIREMENTS §11.4 item 1. Implement `packages/calc/src/intake/dxf.ts` (pure geometry: entities → closed loops → outer loop bounding box, net area via shoelace minus inner loops, total cut length with arcs/circles exact and splines approximated to 0.005 in, pierce count = closed loops, hole list by diameter) with tests on three sample DXFs you generate (a rectangle with four holes, an L-bracket flat with an obround slot, a circular flange with a bolt pattern). Add drop-zone support for `.dxf` on the Quote page: creates or fills a part line with flat size, finished area and the full laser feature list, tagged as source "dxf". Show the parsed outline in the nesting preview instead of a rectangle.
+
+✅ Drop the rectangle-with-holes DXF: cut length equals 2(L+W)+4πd to 0.01 in; pierces = 5; area = LW − 4π(d/2)².
 
 ### 4.5 Quote log, customers, outputs ⏱ 2 h
 *Prompt to Claude:*

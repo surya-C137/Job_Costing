@@ -260,3 +260,36 @@ Tolerance ±0.005. Add a second fixture once the estimator gives you a recent re
 7. Which fields on the customer PDF; do any customers require their own quote form?
 8. Where is the server; who is IT; backup target; how are drawings received (email/portal)?
 9. Which 10 recent quotes can we use for parallel validation?
+
+---
+
+## 11. Modernization review (what to keep, refresh, or add vs. the 1998 workbook)
+
+Principle: parity first, then modernize as **data** (Settings) or **flags**, never as silent code changes.
+
+### 11.1 Keep — still standard practice
+Share-of-blank material costing; minimum-charge strip; quantity breaks with setup amortization; separate material/labor markups; material % of selling price; clamp-strip grid nesting for estimating; feature-count laser model with loss factor; punch hit-rate model; plating `MAX(lot min, $/in², part min)`; assembly standard seconds.
+
+### 11.2 Refresh as seed/settings data (day-one owner task, guided by Settings screens)
+| Item | Workbook | 2026 reality | Action |
+|---|---|---|---|
+| Laser speeds / pierce | CO₂-era (16 ga CRS 254 in/min, 0.1 s) | Fiber 6–12 kW: ~3–4× faster thin gauge; sub-0.1 s pierces | Speed/pierce columns editable per material; add a "laser type" note; add **assist-gas $/hr** to the laser rate |
+| Kerf/spacing | 0.5 in laser | 0.25–0.375 in fiber | Process preset (flag Q5) |
+| Shop rates | $75 manual, $100 laser | ~$85–125 manual, $150–250 laser | Operations table |
+| Material prices | 2023 | tariff-volatile | Versioned prices; add **$/cwt** input (÷100) alongside $/lb; optional surcharge % line |
+| Plating spec names | QQ-P-35, MIL-C-5541, QQ-P-416, QQ-N-290, MIL-C-13924, MIL-C-26074 | ASTM A967/AMS 2700, MIL-DTL-5541, AMS-QQ-P-416, AMS-QQ-N-290, MIL-DTL-13924, ASTM B733 | Refresh names; keep old names as aliases for reading old drawings |
+| RoHS / REACH | not modeled | hex-chrome yellow chromate, cadmium restricted for most commercial work | `rohs_compliant` flag per plating spec; trivalent alternatives added; estimator warned when a non-compliant finish is picked for a customer flagged RoHS |
+| Quantity breaks | 1/5/10/30/50/100 | often also 250/500 | Config default; per-quote editable (already) |
+
+### 11.3 Change behind flags (see §5.7)
+Q2 (×60 machine factor) and Q3 (perimeter-as-area coating) are almost certainly artifacts. Modern coating cost = coated area (both sides) ÷ coverage × powder $/lb + rack/hang labor + masking. Implement the modern model as the non-parity path so switching the flag off yields a defensible number, not zero.
+
+### 11.4 Add — capabilities the workbook couldn't have
+1. **DXF flat-pattern import** (Phase 4, after PDF intake): parse DXF (lines, arcs, circles, polylines, splines approximated) → outer profile bounding box, net area (shoelace on outer minus inner loops), total cut length, pierce count (= closed loops), hole list by diameter. Populates flat size, finished area, and the entire laser feature worksheet automatically. Library: `dxf-parser` (client or server), pure geometry in `packages/calc/src/intake/dxf.ts`, tested with three sample DXFs. STEP unfolding is out of scope (requires CAD kernel).
+2. **Freight, packaging, rush multiplier, minimum order charge** as quote-level lines.
+3. **Material surcharge %** and **price alerts** (open quotes older than N days with material price changes since snapshot).
+4. **Scrap credit** — supported, default off (unchanged from prototype).
+5. **Hours per 100** — display convention only; engine stores per-part.
+
+### 11.5 Explicitly not changing
+Nesting method (grid) for estimating; per-operation standards structure; the six-break quote layout the shop's customers already know.

@@ -10,12 +10,23 @@
  * REQUIREMENTS §9 part and must reproduce the shop's workbook to the cent.
  *
  * Modules land here from BUILD-PLAN Task 1.2 onward:
- *   material.ts  nesting, blank cost, minimum charge      §5.1
- *   laser.ts     feature list -> cut inches -> hours/100  §5.2
- *   punch.ts     hit counter -> hours/100                 §5.3
- *   operations.ts setup and direct labour                 §5.4
- *   finish.ts    plating, coating, silkscreen             §5.5
- *   rollup.ts    cost stack per quantity break            §5.6
+ *   material.ts   nesting, blank cost, minimum charge      §5.1
+ *   laser.ts      feature list -> cut inches -> hours/100  §5.2
+ *   punch.ts      hit counter -> hours/100                 §5.3
+ *   operations.ts setup and direct labour                  §5.4
+ *   finish.ts     plating, coating, silkscreen             §5.5
+ *   rollup.ts     cost stack per quantity break            §5.6
+ *   intake/       material and thickness resolvers         §8
+ *   intake/dxf.ts flat-pattern geometry                    §11.4
+ *
+ * Every parity flag needs both branches. §11.3 is explicit that turning one
+ * off has to yield a defensible number rather than zero — so `finish.ts` owns
+ * two coating models (the workbook's perimeter-as-area, and coated area over
+ * coverage) and `operations.ts` owns both the x60 and x100 paths.
+ *
+ * `intake/` takes parsed input, never raw files: `dxf-parser` and pdf.js live
+ * in the caller, and the geometry and resolution live here. That is what keeps
+ * the dependency count at zero.
  */
 
 /**
