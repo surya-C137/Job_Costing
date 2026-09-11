@@ -20,10 +20,10 @@ import { seedBlankShop } from '../src/seed-blank.js';
  * leaked into code rather than data, a blank shop is where it would show up.
  */
 describe('db:seed-blank', () => {
-  it('creates a shop with gauge tables and nothing that costs money', () => {
+  it('creates a shop with gauge tables and nothing that costs money', async () => {
     const handle = openMigratedMemoryDatabase();
     try {
-      seedBlankShop(handle, { shopName: 'Second Shop', adminPassword: 'x' });
+      await seedBlankShop(handle, { shopName: 'Second Shop', adminPassword: 'x' });
 
       expect(handle.db.select().from(materialFamilies).all().length).toBe(4);
       expect(handle.db.select().from(gaugeReference).all().length).toBeGreaterThan(80);
@@ -38,10 +38,10 @@ describe('db:seed-blank', () => {
     }
   });
 
-  it('starts with the parity flags off — there is no workbook to match', () => {
+  it('starts with the parity flags off — there is no workbook to match', async () => {
     const handle = openMigratedMemoryDatabase();
     try {
-      seedBlankShop(handle, { adminPassword: 'x' });
+      await seedBlankShop(handle, { adminPassword: 'x' });
       const shop = handle.db.select().from(shops).get();
       expect(shop?.parityMarkupInsideMinChargeMax).toBe(false);
       expect(shop?.parityMachineTimeFactor).toBe(1);
@@ -52,10 +52,10 @@ describe('db:seed-blank', () => {
     }
   });
 
-  it('seeds the gauge a drawing actually calls out', () => {
+  it('seeds the gauge a drawing actually calls out', async () => {
     const handle = openMigratedMemoryDatabase();
     try {
-      seedBlankShop(handle, { adminPassword: 'x' });
+      await seedBlankShop(handle, { adminPassword: 'x' });
 
       const steel = handle.db
         .select()
@@ -94,10 +94,10 @@ describe('db:seed-blank', () => {
     }
   });
 
-  it('seeds the family aliases the intake resolver reads (§8)', () => {
+  it('seeds the family aliases the intake resolver reads (§8)', async () => {
     const handle = openMigratedMemoryDatabase();
     try {
-      seedBlankShop(handle, { adminPassword: 'x' });
+      await seedBlankShop(handle, { adminPassword: 'x' });
       const aliases = handle.db.select().from(intakeAliases).all();
       const values = aliases.map((a) => a.alias);
       expect(values).toContain('CRS');
@@ -108,10 +108,10 @@ describe('db:seed-blank', () => {
     }
   });
 
-  it('leaves markups at 1.0 rather than borrowing another shop’s', () => {
+  it('leaves markups at 1.0 rather than borrowing another shop’s', async () => {
     const handle = openMigratedMemoryDatabase();
     try {
-      seedBlankShop(handle, { adminPassword: 'x' });
+      await seedBlankShop(handle, { adminPassword: 'x' });
       const shop = handle.db.select().from(shops).get();
       expect(shop?.laborMarkup).toBe(1);
       expect(shop?.materialMarkup).toBe(1);

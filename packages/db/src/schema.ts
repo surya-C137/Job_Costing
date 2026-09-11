@@ -27,8 +27,11 @@
  *   - Money is REAL dollars; lengths are inches; times are hours or seconds.
  *     Column names carry the unit.
  *   - Timestamps are epoch milliseconds, read back as `Date`.
+ *   - Uniqueness on a soft-deletable table holds among *live* rows only
+ *     (`liveOnly()` below), so an archived row never blocks its successor.
  */
 
+import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { ulid } from 'ulid';
 
@@ -97,6 +100,18 @@ const shopFk = () =>
 const sourceKey = () => text('source_key');
 
 const bool = (name: string) => integer(name, { mode: 'boolean' });
+
+/**
+ * The predicate for a partial unique index: unique among rows not archived.
+ *
+ * Soft delete (§7) keeps a removed row in its table for the quotes that used
+ * it, and a plain unique index keeps enforcing against it — so an archived
+ * "CRS 16 GA" would block the owner from ever entering a new one, and a config
+ * import that archives the old catalog could not write the new one beside it.
+ * Written as raw SQL rather than through the column reference because SQLite
+ * wants a bare column name in an index predicate.
+ */
+const liveOnly = () => sql`archived_at IS NULL`;
 
 /* =========================================================================
    Shop, users, sessions
@@ -167,7 +182,7 @@ export const users = sqliteTable(
     lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('users_shop_username_idx').on(t.shopId, t.username)],
+  (t) => [uniqueIndex('users_shop_username_idx').on(t.shopId, t.username).where(liveOnly())],
 );
 
 /** Server-side sessions, 12 h (§7 security). No soft delete: a session that is
@@ -206,7 +221,7 @@ export const materialFamilies = sqliteTable(
     defaultScrapPricePerLbUsd: real('default_scrap_price_per_lb_usd').notNull().default(0),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('material_families_shop_name_idx').on(t.shopId, t.name)],
+  (t) => [uniqueIndex('material_families_shop_name_idx').on(t.shopId, t.name).where(liveOnly())],
 );
 
 /** `GaugeEntry` — family × gauge label → decimal thickness (§3). */
@@ -227,7 +242,11 @@ export const gaugeReference = sqliteTable(
     lbPerSqFtOverride: real('lb_per_sq_ft_override'),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('gauge_reference_shop_family_label_idx').on(t.shopId, t.familyId, t.label)],
+  (t) => [
+    uniqueIndex('gauge_reference_shop_family_label_idx')
+      .on(t.shopId, t.familyId, t.label)
+      .where(liveOnly()),
+  ],
 );
 
 /**
@@ -262,7 +281,7 @@ export const materials = sqliteTable(
     ...softDelete(),
   },
   (t) => [
-    uniqueIndex('materials_shop_name_idx').on(t.shopId, t.name),
+    uniqueIndex('materials_shop_name_idx').on(t.shopId, t.name).where(liveOnly()),
     index('materials_family_idx').on(t.familyId),
   ],
 );
@@ -359,7 +378,7 @@ export const machines = sqliteTable(
     active: bool('active').notNull().default(true),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('machines_shop_name_idx').on(t.shopId, t.name)],
+  (t) => [uniqueIndex('machines_shop_name_idx').on(t.shopId, t.name).where(liveOnly())],
 );
 
 /**
@@ -385,7 +404,9 @@ export const machineMaterialRates = sqliteTable(
     punchRateFactor: real('punch_rate_factor').notNull().default(0),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('machine_material_rates_pair_idx').on(t.machineId, t.materialId)],
+  (t) => [
+    uniqueIndex('machine_material_rates_pair_idx').on(t.machineId, t.materialId).where(liveOnly()),
+  ],
 );
 
 /** `PunchHitRate` — a tool's hit rate, per punch machine (§5.3). Ten tools in
@@ -458,7 +479,7 @@ export const platingSpecs = sqliteTable(
     active: bool('active').notNull().default(true),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('plating_specs_shop_name_idx').on(t.shopId, t.name)],
+  (t) => [uniqueIndex('plating_specs_shop_name_idx').on(t.shopId, t.name).where(liveOnly())],
 );
 
 /**
@@ -496,7 +517,7 @@ export const coatingModels = sqliteTable(
     modernMaskingUsdPerFeature: real('modern_masking_usd_per_feature'),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('coating_models_shop_name_idx').on(t.shopId, t.name)],
+  (t) => [uniqueIndex('coating_models_shop_name_idx').on(t.shopId, t.name).where(liveOnly())],
 );
 
 /** `SilkscreenTier` — screen charge amortised, plus print cost per part. */
@@ -513,7 +534,7 @@ export const silkscreenTiers = sqliteTable(
     active: bool('active').notNull().default(true),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('silkscreen_tiers_shop_name_idx').on(t.shopId, t.name)],
+  (t) => [uniqueIndex('silkscreen_tiers_shop_name_idx').on(t.shopId, t.name).where(liveOnly())],
 );
 
 /** `AssemblyStandard` — seconds per action (§3). */
@@ -564,7 +585,9 @@ export const intakeAliases = sqliteTable(
     ...softDelete(),
   },
   (t) => [
-    uniqueIndex('intake_aliases_shop_kind_alias_idx').on(t.shopId, t.kind, t.alias),
+    uniqueIndex('intake_aliases_shop_kind_alias_idx')
+      .on(t.shopId, t.kind, t.alias)
+      .where(liveOnly()),
     index('intake_aliases_target_idx').on(t.targetId),
   ],
 );
@@ -590,7 +613,7 @@ export const customers = sqliteTable(
     notes: text('notes'),
     ...softDelete(),
   },
-  (t) => [uniqueIndex('customers_shop_name_idx').on(t.shopId, t.name)],
+  (t) => [uniqueIndex('customers_shop_name_idx').on(t.shopId, t.name).where(liveOnly())],
 );
 
 /**
@@ -672,6 +695,8 @@ export const quotes = sqliteTable(
     ...softDelete(),
   },
   (t) => [
+    // Not live-only, unlike the catalog's names: a quote number is never
+    // reused, archived or not. It is what a customer's PO refers back to.
     uniqueIndex('quotes_shop_number_idx').on(t.shopId, t.quoteNumber),
     index('quotes_customer_idx').on(t.customerId),
     index('quotes_status_date_idx').on(t.shopId, t.status, t.quoteDate),

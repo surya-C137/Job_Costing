@@ -30,8 +30,9 @@ import { fail, isEntryPoint, printCounts } from './cli.js';
 import { openDatabase, runMigrations, type DatabaseHandle } from './db.js';
 import { generatePassword, hashPassword } from './password.js';
 import { seedDir } from './paths.js';
-import { shops, users } from './schema.js';
+import { shops } from './schema.js';
 import { readSeedBundle } from './seed-files.js';
+import { insertUser } from './users.js';
 import { writeShopConfig } from './write-config.js';
 
 /**
@@ -76,7 +77,10 @@ export interface SeedResult {
  * thing to want — but on a v1 deployment it is almost always a re-run of the
  * command, and silently building a second catalog would be very hard to spot.
  */
-export function seedWorkbookShop(handle: DatabaseHandle, options: SeedOptions = {}): SeedResult {
+export async function seedWorkbookShop(
+  handle: DatabaseHandle,
+  options: SeedOptions = {},
+): Promise<SeedResult> {
   const existing = handle.db.select({ id: shops.id }).from(shops).all();
   if (existing.length > 0 && options.force !== true) {
     throw new Error(
@@ -93,43 +97,41 @@ export function seedWorkbookShop(handle: DatabaseHandle, options: SeedOptions = 
     enabledModules: [...ALL_SHEET_METAL_MODULES],
   });
 
-  const written = writeShopConfig(handle, config, {
-    shopId,
-    pricesEffectiveFrom: WORKBOOK_PRICE_VINTAGE,
-    priceNote: 'Seeded from Quote_Metal_Cost.xls (2023-era prices, REQUIREMENTS §6)',
-  });
-
-  const username = options.adminUsername ?? 'admin';
   const generated = options.adminPassword === undefined ? generatePassword() : undefined;
-  const password = options.adminPassword ?? generated ?? '';
+  const passwordHash = await hashPassword(options.adminPassword ?? generated ?? '');
 
-  handle.db
-    .insert(users)
-    .values({
-      id: ulid(),
+  // The catalog and its first admin commit together. A shop nobody can sign
+  // in to is worse than no shop — and the seed refuses to run twice, so it
+  // could not be finished by running it again.
+  const { written, admin } = handle.sqlite.transaction(() => ({
+    written: writeShopConfig(handle, config, {
       shopId,
-      username,
-      email: options.adminEmail ?? null,
-      displayName: 'Administrator',
+      pricesEffectiveFrom: WORKBOOK_PRICE_VINTAGE,
+      priceNote: 'Seeded from Quote_Metal_Cost.xls (2023-era prices, REQUIREMENTS §6)',
+    }),
+    admin: insertUser(handle.db, shopId, {
+      username: options.adminUsername ?? 'admin',
+      passwordHash,
       role: 'admin',
-      passwordHash: hashPassword(password),
+      displayName: 'Administrator',
+      email: options.adminEmail ?? null,
       // Whether the operator chose it or we generated it, a bootstrap password
       // that has been printed to a terminal is not a password any more.
       mustChangePassword: true,
-    })
-    .run();
+    }),
+  }))();
 
   const counts = { ...written.counts, users: 1 };
   return {
     shopId,
     shopName: config.defaults.shopName,
     counts,
-    adminUsername: username,
+    adminUsername: admin.username,
     ...(generated === undefined ? {} : { generatedPassword: generated }),
   };
 }
 
-export function seedCommand(argv: string[] = process.argv.slice(2)): number {
+export async function seedCommand(argv: string[] = process.argv.slice(2)): Promise<number> {
   const { values } = parseArgs({
     args: argv,
     options: {
@@ -151,7 +153,7 @@ export function seedCommand(argv: string[] = process.argv.slice(2)): number {
     // `-- --flag "value with spaces"` into caret-escaped nonsense, and shops
     // run Windows Server (§2). The flag stays for POSIX and for one-word names.
     const shopName = values['shop-name'] ?? env['SHOPQUOTE_SHOP_NAME'];
-    const result = seedWorkbookShop(handle, {
+    const result = await seedWorkbookShop(handle, {
       ...(shopName === undefined ? {} : { shopName }),
       ...(env['SHOPQUOTE_ADMIN_USERNAME'] === undefined
         ? {}
@@ -202,11 +204,8 @@ export function findShopByName(handle: DatabaseHandle, name: string): { id: stri
 }
 
 if (isEntryPoint(import.meta.url)) {
-  let code = 0;
-  try {
-    code = seedCommand();
-  } catch (error) {
-    code = fail(error);
-  }
-  process.exit(code);
+  seedCommand().then(
+    (code) => process.exit(code),
+    (error: unknown) => process.exit(fail(error)),
+  );
 }

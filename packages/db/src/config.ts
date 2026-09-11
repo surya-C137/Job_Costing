@@ -105,12 +105,19 @@ export function loadShopConfig(
       aliases: aliases.get(f.id) ?? [],
     }))
     .sort(byName);
+  const liveFamilyIds = new Set(families.map((f) => f.id));
 
+  // Rows that only mean something beside a parent — a gauge in a family, a
+  // stock size of a material, a machine's speed in a material — are left out
+  // once the parent is archived. Archived is invisible (§7), and a config that
+  // mentioned a child of something it does not contain could not be imported
+  // back.
   const gauges: GaugeEntry[] = db
     .select()
     .from(gaugeReference)
     .where(live(gaugeReference))
     .all()
+    .filter((g) => liveFamilyIds.has(g.familyId))
     .map((g) => ({
       id: g.id,
       familyId: g.familyId,
@@ -147,11 +154,18 @@ export function loadShopConfig(
     })
     .sort(byName);
 
+  const liveMaterialIds = new Set(materialList.map((m) => m.id));
+
   const stockSizeList: StockSize[] = db
     .select()
     .from(stockSizes)
     .where(live(stockSizes))
     .all()
+    .filter(
+      (s) =>
+        (s.materialId === null || liveMaterialIds.has(s.materialId)) &&
+        (s.familyId === null || liveFamilyIds.has(s.familyId)),
+    )
     .map((s) => ({
       id: s.id,
       materialId: s.materialId,
@@ -196,11 +210,14 @@ export function loadShopConfig(
     }))
     .sort(byName);
 
+  const liveMachineIds = new Set(machineList.map((m) => m.id));
+
   const rates: MachineMaterialRate[] = db
     .select()
     .from(machineMaterialRates)
     .where(live(machineMaterialRates))
     .all()
+    .filter((r) => liveMachineIds.has(r.machineId) && liveMaterialIds.has(r.materialId))
     .map((r) => ({
       machineId: r.machineId,
       materialId: r.materialId,
@@ -347,6 +364,16 @@ export function loadShopConfig(
   };
 }
 
+/** The live shops in a database: one, on a v1 deployment (§12 rule 4). The
+ *  API uses it at startup to find the shop it serves. */
+export function listShops(db: ShopQuoteDatabase): { id: string; name: string }[] {
+  return db
+    .select({ id: shops.id, name: shops.name })
+    .from(shops)
+    .where(isNull(shops.archivedAt))
+    .all();
+}
+
 /** Sort catalogs the way a picker shows them. Order does not affect pricing —
  *  the engine looks everything up by id — but a stable one makes an exported
  *  config diffable and a Settings table predictable. */
@@ -372,7 +399,7 @@ function aliasIndex(db: ShopQuoteDatabase, shopId: string): Map<string, string[]
   return index;
 }
 
-interface EffectivePrice {
+export interface EffectivePrice {
   pricePerLbUsd: number;
   sheetCostUsd: number | null;
   sheetLbs: number | null;
@@ -386,7 +413,7 @@ interface EffectivePrice {
  * typo the same afternoon expects. A material with no row on or before `asOf`
  * is simply absent from the map.
  */
-function effectivePrices(
+export function effectivePrices(
   db: ShopQuoteDatabase,
   shopId: string,
   asOf: Date,
@@ -422,6 +449,65 @@ function effectivePrices(
     }
   }
   return best;
+}
+
+/** One stored price version (§7), as the history drawer and the config export
+ *  see it. */
+export interface PriceVersion {
+  id: string;
+  materialId: string;
+  pricePerLbUsd: number;
+  sheetCostUsd: number | null;
+  sheetLbs: number | null;
+  effectiveFrom: Date;
+  note: string | null;
+  enteredByUserId: string | null;
+  createdAt: Date;
+}
+
+export function toPriceVersion(row: typeof materialPrices.$inferSelect): PriceVersion {
+  return {
+    id: row.id,
+    materialId: row.materialId,
+    pricePerLbUsd: row.pricePerLbUsd,
+    sheetCostUsd: row.sheetCostUsd,
+    sheetLbs: row.sheetLbs,
+    effectiveFrom: row.effectiveFrom,
+    note: row.note,
+    enteredByUserId: row.enteredByUserId,
+    createdAt: row.createdAt,
+  };
+}
+
+/**
+ * Every price version a shop has — or one material's — oldest first: by
+ * effective date, then by when it was entered. That is the order
+ * `effectivePrices()` resolves a same-day tie in, so the last version on or
+ * before a date is the one in force on it.
+ */
+export function loadPriceHistory(
+  db: ShopQuoteDatabase,
+  shopId: string,
+  materialId?: string,
+): PriceVersion[] {
+  return db
+    .select()
+    .from(materialPrices)
+    .where(
+      and(
+        eq(materialPrices.shopId, shopId),
+        isNull(materialPrices.archivedAt),
+        materialId === undefined ? undefined : eq(materialPrices.materialId, materialId),
+      ),
+    )
+    .all()
+    .map(toPriceVersion)
+    .sort(
+      (a, b) =>
+        a.effectiveFrom.getTime() - b.effectiveFrom.getTime() ||
+        a.createdAt.getTime() - b.createdAt.getTime() ||
+        a.id.localeCompare(b.id),
+    );
 }
 
 /* =========================================================================

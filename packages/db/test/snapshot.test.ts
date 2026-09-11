@@ -35,9 +35,9 @@ interface Fixture {
   result: QuoteResult;
 }
 
-function fixture(): Fixture {
+async function fixture(): Promise<Fixture> {
   const handle = openMigratedMemoryDatabase();
-  const { shopId } = seedWorkbookShop(handle, { adminPassword: 'test' });
+  const { shopId } = await seedWorkbookShop(handle, { adminPassword: 'test' });
   const config = loadShopConfig(handle.db, shopId, AFTER_SEED);
 
   const customer = handle.db
@@ -120,11 +120,11 @@ function argsFor(f: Fixture): {
 
 describe('saveSnapshot', () => {
   let f: Fixture;
-  beforeEach(() => {
-    f = fixture();
+  beforeEach(async () => {
+    f = await fixture();
   });
 
-  it('numbers versions from one and moves the quote pointer with them', () => {
+  it('numbers versions from one and moves the quote pointer with them', async () => {
     const first = saveSnapshot(f.handle, argsFor(f));
     const second = saveSnapshot(f.handle, argsFor(f));
 
@@ -135,7 +135,7 @@ describe('saveSnapshot', () => {
     f.handle.close();
   });
 
-  it('stores one config row for many saves of the same config', () => {
+  it('stores one config row for many saves of the same config', async () => {
     // The point of content-addressing. Twenty autosaves on an untouched
     // Settings must not be twenty copies of a 100 KB catalog.
     for (let i = 0; i < 20; i += 1) saveSnapshot(f.handle, argsFor(f));
@@ -145,7 +145,7 @@ describe('saveSnapshot', () => {
     f.handle.close();
   });
 
-  it('writes a second config row once a rate actually changes', () => {
+  it('writes a second config row once a rate actually changes', async () => {
     const before = saveSnapshot(f.handle, argsFor(f));
     expect(before.reusedSnapshot).toBe(false);
 
@@ -167,14 +167,14 @@ describe('saveSnapshot', () => {
     f.handle.close();
   });
 
-  it('reports a reused snapshot as reused', () => {
+  it('reports a reused snapshot as reused', async () => {
     saveSnapshot(f.handle, argsFor(f));
     const again = saveSnapshot(f.handle, argsFor(f));
     expect(again.reusedSnapshot).toBe(true);
     f.handle.close();
   });
 
-  it('refuses a snapshot that belongs to no quote', () => {
+  it('refuses a snapshot that belongs to no quote', async () => {
     expect(() => saveSnapshot(f.handle, { ...argsFor(f), quoteId: 'nope' })).toThrow(
       /No quote nope/,
     );
@@ -186,11 +186,11 @@ describe('saveSnapshot', () => {
 
 describe('loadSnapshot', () => {
   let f: Fixture;
-  beforeEach(() => {
-    f = fixture();
+  beforeEach(async () => {
+    f = await fixture();
   });
 
-  it('gives back the newest version, config and all', () => {
+  it('gives back the newest version, config and all', async () => {
     saveSnapshot(f.handle, argsFor(f));
     const loaded = loadSnapshot(f.handle.db, f.quoteId);
 
@@ -208,7 +208,7 @@ describe('loadSnapshot', () => {
    * March's rates when it is reopened, whatever Settings says now. Without
    * this, "re-pricing is explicit" is just a sentence.
    */
-  it('keeps the old version answering with the old rates', () => {
+  it('keeps the old version answering with the old rates', async () => {
     const march = saveSnapshot(f.handle, argsFor(f));
     const marchPrice = f.result.parts[0]?.breaks[5]?.sellingPriceUsd;
 
@@ -237,13 +237,13 @@ describe('loadSnapshot', () => {
     f.handle.close();
   });
 
-  it('returns nothing for a quote that has never been saved', () => {
+  it('returns nothing for a quote that has never been saved', async () => {
     expect(loadSnapshot(f.handle.db, f.quoteId)).toBeUndefined();
     expect(loadSnapshot(f.handle.db, 'no-such-quote')).toBeUndefined();
     f.handle.close();
   });
 
-  it('returns nothing for a version number that does not exist', () => {
+  it('returns nothing for a version number that does not exist', async () => {
     saveSnapshot(f.handle, argsFor(f));
     expect(loadSnapshot(f.handle.db, f.quoteId, 7)).toBeUndefined();
     f.handle.close();

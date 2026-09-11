@@ -29,7 +29,8 @@ import { fail, isEntryPoint, printCounts } from './cli.js';
 import { openDatabase, runMigrations, type DatabaseHandle } from './db.js';
 import { generatePassword, hashPassword } from './password.js';
 import { referenceFamilies, referenceGauges } from './reference/gauges.js';
-import { shops, users } from './schema.js';
+import { shops } from './schema.js';
+import { insertUser } from './users.js';
 import { writeShopConfig } from './write-config.js';
 
 export interface BlankShopOptions {
@@ -99,10 +100,10 @@ export function blankShopConfig(shopId: string, options: BlankShopOptions = {}):
   };
 }
 
-export function seedBlankShop(
+export async function seedBlankShop(
   handle: DatabaseHandle,
   options: BlankShopOptions = {},
-): BlankShopResult {
+): Promise<BlankShopResult> {
   const existing = handle.db.select({ id: shops.id }).from(shops).all();
   if (existing.length > 0 && options.force !== true) {
     throw new Error(
@@ -113,40 +114,38 @@ export function seedBlankShop(
 
   const shopId = ulid();
   const config = blankShopConfig(shopId, options);
-  const written = writeShopConfig(handle, config, {
-    shopId,
-    // Nothing is priced yet, so the date only ever applies to rows that do not
-    // exist. Kept explicit rather than optional so the writer has one path.
-    pricesEffectiveFrom: new Date(),
-  });
-
-  const username = options.adminUsername ?? 'admin';
   const generated = options.adminPassword === undefined ? generatePassword() : undefined;
+  const passwordHash = await hashPassword(options.adminPassword ?? generated ?? '');
 
-  handle.db
-    .insert(users)
-    .values({
-      id: ulid(),
+  // One unit, as in `seedWorkbookShop()`: a shop nobody can sign in to is
+  // worse than none.
+  const { written, admin } = handle.sqlite.transaction(() => ({
+    written: writeShopConfig(handle, config, {
       shopId,
-      username,
-      email: options.adminEmail ?? null,
-      displayName: 'Administrator',
+      // Nothing is priced yet, so the date only ever applies to rows that do
+      // not exist. Kept explicit rather than optional so the writer has one path.
+      pricesEffectiveFrom: new Date(),
+    }),
+    admin: insertUser(handle.db, shopId, {
+      username: options.adminUsername ?? 'admin',
+      passwordHash,
       role: 'admin',
-      passwordHash: hashPassword(options.adminPassword ?? generated ?? ''),
+      displayName: 'Administrator',
+      email: options.adminEmail ?? null,
       mustChangePassword: true,
-    })
-    .run();
+    }),
+  }))();
 
   return {
     shopId,
     shopName: config.defaults.shopName,
     counts: { ...written.counts, users: 1 },
-    adminUsername: username,
+    adminUsername: admin.username,
     ...(generated === undefined ? {} : { generatedPassword: generated }),
   };
 }
 
-export function seedBlankCommand(argv: string[] = process.argv.slice(2)): number {
+export async function seedBlankCommand(argv: string[] = process.argv.slice(2)): Promise<number> {
   const { values } = parseArgs({
     args: argv,
     options: {
@@ -172,7 +171,7 @@ export function seedBlankCommand(argv: string[] = process.argv.slice(2)): number
     // `-- --flag "value with spaces"` into caret-escaped nonsense, and shops
     // run Windows Server (§2). The flag stays for POSIX and for one-word names.
     const shopName = values['shop-name'] ?? env['SHOPQUOTE_SHOP_NAME'];
-    const result = seedBlankShop(handle, {
+    const result = await seedBlankShop(handle, {
       ...(shopName === undefined ? {} : { shopName }),
       ...(unitSystem === undefined ? {} : { unitSystem }),
       ...(values.currency === undefined ? {} : { currency: values.currency }),
@@ -206,11 +205,8 @@ export function seedBlankCommand(argv: string[] = process.argv.slice(2)): number
 }
 
 if (isEntryPoint(import.meta.url)) {
-  let code = 0;
-  try {
-    code = seedBlankCommand();
-  } catch (error) {
-    code = fail(error);
-  }
-  process.exit(code);
+  seedBlankCommand().then(
+    (code) => process.exit(code),
+    (error: unknown) => process.exit(fail(error)),
+  );
 }

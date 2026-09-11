@@ -27,8 +27,8 @@ import golden from '../../calc/test/fixtures/golden-workbook.json' with { type: 
  * estimator picks a material, so it is the honest lookup.
  */
 
-function seededConfig(handle: DatabaseHandle): ShopConfig {
-  const { shopId } = seedWorkbookShop(handle, { adminPassword: 'test' });
+async function seededConfig(handle: DatabaseHandle): Promise<ShopConfig> {
+  const { shopId } = await seedWorkbookShop(handle, { adminPassword: 'test' });
   // As of the day after the workbook's prices took effect, so the seeded
   // version is the one in force.
   return loadShopConfig(handle.db, shopId, new Date(WORKBOOK_PRICE_VINTAGE.getTime() + 86_400_000));
@@ -76,14 +76,16 @@ function goldenQuote(config: ShopConfig): QuoteInput {
   return { parts: [goldenPart(config)], quantityBreaks: [...golden.quantity_breaks] };
 }
 
-describe('the golden case, through the database (§9)', () => {
-  const handle = openMigratedMemoryDatabase();
-  const config = seededConfig(handle);
-  const result = computeQuote(goldenQuote(config), config);
-  const part = result.parts[0];
-  if (part === undefined) throw new Error('computeQuote returned no parts');
+// Seeding hashes the admin's password, which is async, so the case is priced
+// once at module level and every assertion below reads the same result.
+const handle = openMigratedMemoryDatabase();
+const config = await seededConfig(handle);
+const result = computeQuote(goldenQuote(config), config);
+const part = result.parts[0];
+if (part === undefined) throw new Error('computeQuote returned no parts');
 
-  it('reproduces the six selling prices to ±0.005', () => {
+describe('the golden case, through the database (§9)', () => {
+  it('reproduces the six selling prices to ±0.005', async () => {
     part.breaks.forEach((stack, i) => {
       const expected = golden.expected.selling_price[i];
       if (expected === undefined) throw new Error(`no expected price at index ${i}`);
@@ -94,7 +96,7 @@ describe('the golden case, through the database (§9)', () => {
     });
   });
 
-  it('reproduces the six material percentages to ±0.001', () => {
+  it('reproduces the six material percentages to ±0.001', async () => {
     part.breaks.forEach((stack, i) => {
       const expected = golden.expected.material_pct_of_selling[i];
       if (expected === undefined) throw new Error(`no expected percentage at index ${i}`);
@@ -105,7 +107,7 @@ describe('the golden case, through the database (§9)', () => {
     });
   });
 
-  it('reproduces the intermediates that survive the round trip', () => {
+  it('reproduces the intermediates that survive the round trip', async () => {
     const one = part.breaks[0];
     const hundred = part.breaks[5];
     if (one === undefined || hundred === undefined) throw new Error('missing breaks');
@@ -120,14 +122,14 @@ describe('the golden case, through the database (§9)', () => {
     );
   });
 
-  it('raises the minimum-charge warning and nothing else', () => {
+  it('raises the minimum-charge warning and nothing else', async () => {
     // Anything else here would mean a lookup fell through the round trip — a
     // machine rate that did not survive, a price that came back null.
     expect(part.warnings.map((w) => w.code)).toEqual(['min-charge-applied']);
     expect(result.warnings).toEqual([]);
   });
 
-  it('carries the parity flags the shop row holds', () => {
+  it('carries the parity flags the shop row holds', async () => {
     expect(config.parity).toEqual({
       markupInsideMinChargeMax: true,
       machineTimeFactor: 0.6,

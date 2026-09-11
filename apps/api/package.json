@@ -5,13 +5,14 @@
   "type": "module",
   "description": "Fastify server. Calc runs here, so its results are authoritative.",
   "scripts": {
-    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "dev": "tsc --build tsconfig.build.json && concurrently -k -n tsc,api -c yellow,blue \"tsc --build tsconfig.build.json --watch --preserveWatchOutput\" \"node --watch dist/index.js\"",
     "start": "node dist/index.js",
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@shopquote/calc": "*",
     "@shopquote/db": "*",
     "fastify": "^5.2.0",

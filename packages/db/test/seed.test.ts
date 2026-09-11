@@ -31,15 +31,15 @@ import { seedWorkbookShop, WORKBOOK_PRICE_VINTAGE } from '../src/seed.js';
  * calc's golden test (§9).
  */
 
-function seeded(): DatabaseHandle {
+async function seeded(): Promise<DatabaseHandle> {
   const handle = openMigratedMemoryDatabase();
-  seedWorkbookShop(handle, { adminPassword: 'correct horse battery staple' });
+  await seedWorkbookShop(handle, { adminPassword: 'correct horse battery staple' });
   return handle;
 }
 
 describe('db:seed', () => {
-  it('creates one shop with the workbook catalog', () => {
-    const handle = seeded();
+  it('creates one shop with the workbook catalog', async () => {
+    const handle = await seeded();
     try {
       const shop = handle.db.select().from(shops).get();
       expect(shop).toBeDefined();
@@ -55,8 +55,8 @@ describe('db:seed', () => {
     }
   });
 
-  it('turns the workbook’s two "process presets" into machines (§3)', () => {
-    const handle = seeded();
+  it('turns the workbook’s two "process presets" into machines (§3)', async () => {
+    const handle = await seeded();
     try {
       const rows = handle.db.select().from(machines).all();
       expect(rows.map((m) => m.name).sort()).toEqual(['Laser', 'Punch']);
@@ -85,8 +85,8 @@ describe('db:seed', () => {
     }
   });
 
-  it('moves speed, pierce and punch factor onto the machine×material pairing', () => {
-    const handle = seeded();
+  it('moves speed, pierce and punch factor onto the machine×material pairing', async () => {
+    const handle = await seeded();
     try {
       const materialColumns = handle.sqlite
         .prepare(`PRAGMA table_info(materials)`)
@@ -121,8 +121,8 @@ describe('db:seed', () => {
     }
   });
 
-  it('versions prices, and leaves unpriced stock unpriced (§7, §12 rule 3)', () => {
-    const handle = seeded();
+  it('versions prices, and leaves unpriced stock unpriced (§7, §12 rule 3)', async () => {
+    const handle = await seeded();
     try {
       const priced = handle.db.select().from(materialPrices).all();
       const all = handle.db.select().from(materials).all();
@@ -144,8 +144,8 @@ describe('db:seed', () => {
     }
   });
 
-  it('writes exactly the rows the ShopConfig carries', () => {
-    const handle = seeded();
+  it('writes exactly the rows the ShopConfig carries', async () => {
+    const handle = await seeded();
     try {
       const config = shopConfigFromSeed(readSeedBundle());
       expect(handle.db.select().from(materials).all()).toHaveLength(config.materials.length);
@@ -162,8 +162,8 @@ describe('db:seed', () => {
     }
   });
 
-  it('keeps both "BRAKE, BEND" rows, at 222/hr and 330/hr', () => {
-    const handle = seeded();
+  it('keeps both "BRAKE, BEND" rows, at 222/hr and 330/hr', async () => {
+    const handle = await seeded();
     try {
       const bends = handle.db
         .select()
@@ -179,8 +179,8 @@ describe('db:seed', () => {
     }
   });
 
-  it('records where every seeded row came from', () => {
-    const handle = seeded();
+  it('records where every seeded row came from', async () => {
+    const handle = await seeded();
     try {
       const orphans = handle.db.select().from(materials).where(isNull(materials.sourceKey)).all();
       expect(orphans).toHaveLength(0);
@@ -198,40 +198,46 @@ describe('db:seed', () => {
     }
   });
 
-  it('creates an admin whose password verifies and must be changed', () => {
-    const handle = seeded();
+  it('creates an admin whose password verifies and must be changed', async () => {
+    const handle = await seeded();
     try {
       const admin = handle.db.select().from(users).get();
       expect(admin?.username).toBe('admin');
       expect(admin?.role).toBe('admin');
       expect(admin?.mustChangePassword).toBe(true);
       expect(admin?.passwordHash).not.toContain('correct horse');
-      expect(verifyPassword(admin?.passwordHash ?? '', 'correct horse battery staple')).toBe(true);
-      expect(verifyPassword(admin?.passwordHash ?? '', 'wrong')).toBe(false);
+      expect(await verifyPassword(admin?.passwordHash ?? '', 'correct horse battery staple')).toBe(
+        true,
+      );
+      expect(await verifyPassword(admin?.passwordHash ?? '', 'wrong')).toBe(false);
     } finally {
       handle.close();
     }
   });
 
-  it('generates a password when none is configured, and returns it once', () => {
+  it('generates a password when none is configured, and returns it once', async () => {
     const handle = openMigratedMemoryDatabase();
     try {
-      const result = seedWorkbookShop(handle);
+      const result = await seedWorkbookShop(handle);
       expect(result.generatedPassword).toBeDefined();
       expect(result.generatedPassword?.length).toBeGreaterThanOrEqual(16);
       const admin = handle.db.select().from(users).get();
-      expect(verifyPassword(admin?.passwordHash ?? '', result.generatedPassword ?? '')).toBe(true);
+      expect(await verifyPassword(admin?.passwordHash ?? '', result.generatedPassword ?? '')).toBe(
+        true,
+      );
     } finally {
       handle.close();
     }
   });
 
-  it('refuses to seed a database that already holds a shop', () => {
-    const handle = seeded();
+  it('refuses to seed a database that already holds a shop', async () => {
+    const handle = await seeded();
     try {
-      expect(() => seedWorkbookShop(handle)).toThrow(/already holds 1 shop/);
+      await expect(seedWorkbookShop(handle)).rejects.toThrow(/already holds 1 shop/);
       // …unless the operator says so. The schema is multi-shop by design.
-      expect(() => seedWorkbookShop(handle, { force: true, shopName: 'Second' })).not.toThrow();
+      await expect(
+        seedWorkbookShop(handle, { force: true, shopName: 'Second' }),
+      ).resolves.toBeDefined();
       expect(handle.db.select().from(shops).all()).toHaveLength(2);
     } finally {
       handle.close();

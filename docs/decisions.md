@@ -4,6 +4,167 @@ Choices made where the spec was silent. Newest first. Format: date · decision �
 
 ---
 
+## 2026-09-10 — Task 3.1, server, auth and config endpoints
+
+`apps/api` serves sign-in and accounts, the whole config (read, the shop page,
+export, import) and six catalogs a row at a time, all problem+json on failure.
+`test/config.test.ts` fetches the config over HTTP and prices §9 from it to the
+cent, so nothing is lost to JSON between the database and the wire.
+
+### Authentication
+
+**argon2id, from the `argon2` package — and so the seeders are now async.**
+The PHC dispatch Task 2.1 built is kept exactly: `verifyPassword()` reads the
+algorithm out of the stored string, a `$scrypt$` row still verifies, nothing
+writes scrypt any more, and a successful login re-hashes whatever
+`needsRehash()` flags. No row is migrated in bulk. Parameters are RFC 9106's
+second recommended set (64 MiB, t=3, p=4). *Alternatives:* Node's own
+`crypto.argon2()` (arrived in 24.7 as experimental, and `engines` still admits
+22); `@node-rs/argon2` (sync and async both, but it ships each platform's
+binary as an optional dependency, and a lockfile written on a Windows box has
+been known to drop the Linux one before a Docker build — Task 5.1's exact
+path). The `argon2` package bundles every platform's prebuilt binary in one
+tarball. Its API is async only, which made `seedWorkbookShop()`,
+`seedBlankShop()` and both seed commands async; thirteen test call sites
+changed with them. The seeders also now write the shop and its first admin in
+one transaction, where Task 2.1 wrote them as two.
+
+**The cookie carries a token; the table stores its SHA-256.** A copy of the
+database — which is what the nightly backup makes — holds no usable session.
+256 random bits, so an unsalted hash is enough. Sessions last twelve hours
+from sign-in, not from last activity: §7's "expire in 12 h" read plainly, and a
+sliding window would keep a browser left open on the shop floor signed in
+indefinitely.
+
+**Closed by default, and the bootstrap password is enforced by the server.**
+A route with no `access` in its config needs a signed-in user; it must say
+`public` to be open. A user whose password someone else set — the seed's
+admin, an admin's reset — reaches only who-am-I, change-password and sign-out
+until they choose their own. `mustChangePassword` existed since Task 2.1 and
+nothing enforced it. The consequence for BUILD-PLAN 3.1's acceptance check is
+one step: login, `PUT /api/auth/password`, then `GET /api/config`.
+
+**The login throttle counts failures, not requests.** Five per address and
+username in fifteen minutes, twenty per address. No limit on a username alone:
+on a shop LAN that would let anyone lock the owner out by mistyping the owner's
+name five times. An unknown username is verified against a decoy argon2id hash
+so it costs what a wrong password does. Kept in memory; a restart clears it.
+*Alternative:* `@fastify/rate-limit` (counts every request, so an estimator
+signing in and out through the day is throttled like a guesser).
+
+**Passwords: fifteen characters, no composition rules** (NIST SP 800-63B-4 for
+a single factor). A few ordinary words is easier on a shop-floor keyboard than
+`Tr0ub4dor&3` and stronger. The policy applies to passwords a person chooses
+through the API; a seed's bootstrap password is exempt because it has to be
+replaced at first sign-in. Not done: the blocklist of common passwords 800-63B
+also asks for. *Alternatives:* 12, or NIST's 8 (the floor only when there is a
+second factor, which there is not).
+
+**CSRF is SameSite=Strict plus JSON-only bodies.** Fastify parses `text/plain`
+by default, and that is one of the bodies a cross-site HTML form can send, so
+the parser is removed: a write needs a JSON body no form can produce.
+
+**Usernames are stored lowercase.** "Admin" at the login box is the admin; the
+unique index cannot then hold two spellings of one person.
+
+**Accounts are admin-only, and got routes although BUILD-PLAN 3.1 does not list
+them.** FR-6 is on 3.1's reading list and says "password reset by admin"; without
+`/api/users` the estimator's account could only come from the seed. A shop
+cannot lose its last admin, and nobody removes themselves.
+
+**Cookie `Secure` defaults on when `NODE_ENV=production`,** with
+`SHOPQUOTE_COOKIE_SECURE` to override either way, so plain-HTTP development
+works and Task 5.1's Caddy deployment does not have to remember.
+`SHOPQUOTE_TRUST_PROXY` makes the throttle see the client behind that proxy.
+
+### The config
+
+**`PUT /api/config` takes the shop page, not the catalogs.** BUILD-PLAN writes
+"GET/PUT /api/config (full config)". The full config is what GET returns; a PUT
+of all of it from a Settings tab opened an hour earlier would archive every
+material another tab had added since. Catalogs change a row at a time through
+their own routes, and replacing them all is an import — explicit, with a dry
+run.
+
+**Import makes the shop's catalog equal the file, matching rows on id.** A row
+the file names is updated in place (and un-archived); an id the shop has never
+seen becomes a new row; a live row the file leaves out is archived. So a shop's
+own export imports as zero changes, a restore brings rows back under their old
+ids, and open quotes keep pointing at live materials. It lives inside
+`writeShopConfig()` as `replace: true`, because creating a shop is the same walk
+over an empty one — the Task 2.1/2.2 round-trip tests now exercise the import
+path too. *Alternatives:* archive everything and insert fresh (every open
+quote's parts would then reference archived rows, and "re-price with current
+rates" would fail on all of them); import only into an empty shop (useless in a
+running app, which always has one).
+
+**The file carries every price version.** A `ShopConfig` holds only the price
+in force; BUILD-PLAN 4.2's acceptance check wants both versions in the export.
+So the file is `{format: "shopquote.config", schemaVersion: 1, exportedAt,
+config, priceHistory}` (REQUIREMENTS §8). A file whose config prices disagree
+with its history as of `exportedAt` is refused and the row named — either
+silent choice would throw away something the owner wrote. A hand-written file
+may omit both history and timestamp; its prices become versions dated at
+import, and only where they differ from what is in force.
+
+**The Zod schema checks across rows, not only fields.** Ids unique across the
+config, every reference resolving inside it, names unique wherever the database
+holds them so — a file that would fail half-way through a write fails up front
+with the path of the row. Field bounds are physics, not policy: nothing
+negative, no zero where calc divides. One exception: the Q2 factor is capped at
+5, because the likeliest mistake with a field the workbook displays as "×60" is
+typing 60, which bills machine time a hundredfold. Module ids this build does
+not ship are refused (§12 rule 3).
+
+### Schema
+
+**Uniqueness holds among live rows (migration `0001`).** Every unique index on a
+soft-deletable table is now partial, `WHERE archived_at IS NULL`. This was a
+latent defect from Task 2.1: archive "CRS 16 GA" and no material could ever be
+called that again, and an import could not archive the old catalog and write
+the new one beside it. Quote numbers stay unique outright — they are never
+reused. The migration touches indexes only; an existing `data/shopquote.db`
+needs `npm run db:migrate`.
+
+**Archiving takes the rows that mean nothing alone.** A material's machine
+rates and stock sizes and its aliases go with it, freeing the name and the
+aliases at once. `loadShopConfig()` also drops gauges, stock sizes and rates
+whose parent is archived, so an export can never mention something it does not
+contain.
+
+### Structure
+
+**Every SQL statement stays in `packages/db`.** `catalog.ts` (Settings writes),
+`users.ts`, `sessions.ts`, `audit.ts`, `config-document.ts`. The API validates,
+authorises and calls functions; its reads go through `loadShopConfig()`, so a
+list shows exactly what the engine would price with. Entity-to-column mapping
+is `columns.ts`, shared by the whole-config writer and the one-row writer, so a
+field added to `MaterialRow` is stored the same way by both.
+
+**The audit row is written inside the data layer's transaction,** by the
+function making the change, with a one-line summary of what moved
+(`defaults.laborMarkup 1.2 → 1.25`). An audit call in a route handler is one the
+next route forgets.
+
+**Catalog paths are the `ShopConfig` keys in kebab case** — `/api/plating-specs`,
+`/api/coating-models`, `/api/silkscreen-tiers`, `/api/assembly-standards` —
+where BUILD-PLAN names them loosely. DELETE archives (§7); there is no restore
+route yet, because an import restores.
+
+**Not yet routed:** machines, families, gauges, stock sizes, machine × material
+rates, aliases. BUILD-PLAN 3.1 does not list them and Task 4.2's Settings needs
+them; each is one `Resource` entry in `catalog.ts` and one `register()` call.
+Until then import covers them.
+
+**`npm run dev -w apps/api` builds, then watches.** It ran `node
+--experimental-strip-types src/index.ts`, which cannot resolve the `.js`
+specifiers NodeNext requires — the same trap as the db scripts (Task 2.1).
+
+Dependencies added: `argon2` (packages/db), `@fastify/cookie` (apps/api).
+`npm audit --omit=dev` is clean.
+
+---
+
 ## 2026-09-10 — Task 2.2, config assembly and quote snapshots
 
 The golden case prices through the database: `packages/db/test/golden.test.ts`

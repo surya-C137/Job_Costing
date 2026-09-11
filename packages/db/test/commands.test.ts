@@ -40,7 +40,7 @@ describe('command line', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('migrates then seeds, and reports what it wrote', () => {
+  it('migrates then seeds, and reports what it wrote', async () => {
     const path = join(dir, 'shopquote.db');
 
     expect(migrateCommand(['--db', path])).toBe(0);
@@ -48,7 +48,7 @@ describe('command line', () => {
     expect(logged.join('\n')).toMatch(/tables present, foreign keys on/);
 
     logged.length = 0;
-    expect(seedCommand(['--db', path])).toBe(0);
+    expect(await seedCommand(['--db', path])).toBe(0);
 
     const handle = openDatabase({ path, mustExist: true });
     try {
@@ -68,22 +68,29 @@ describe('command line', () => {
     expect(output).not.toContain('test-password');
   });
 
-  it('seeds without a prior migrate — the migration runs either way', () => {
+  it('seeds without a prior migrate — the migration runs either way', async () => {
     const path = join(dir, 'direct.db');
-    expect(seedCommand(['--db', path])).toBe(0);
+    expect(await seedCommand(['--db', path])).toBe(0);
     expect(existsSync(path)).toBe(true);
   });
 
-  it('refuses a second seed into the same database', () => {
+  it('refuses a second seed into the same database', async () => {
     const path = join(dir, 'twice.db');
-    expect(seedCommand(['--db', path])).toBe(0);
-    expect(() => seedCommand(['--db', path])).toThrow(/already holds 1 shop/);
+    expect(await seedCommand(['--db', path])).toBe(0);
+    await expect(seedCommand(['--db', path])).rejects.toThrow(/already holds 1 shop/);
   });
 
-  it('creates a blank shop with a name and unit system of its own', () => {
+  it('creates a blank shop with a name and unit system of its own', async () => {
     const path = join(dir, 'blank.db');
     expect(
-      seedBlankCommand(['--db', path, '--shop-name', 'Second Shop', '--unit-system', 'metric']),
+      await seedBlankCommand([
+        '--db',
+        path,
+        '--shop-name',
+        'Second Shop',
+        '--unit-system',
+        'metric',
+      ]),
     ).toBe(0);
 
     const handle = openDatabase({ path, mustExist: true });
@@ -98,13 +105,13 @@ describe('command line', () => {
     expect(logged.join('\n')).toMatch(/Empty on purpose/);
   });
 
-  it('rejects a unit system that is neither imperial nor metric', () => {
-    expect(() =>
+  it('rejects a unit system that is neither imperial nor metric', async () => {
+    await expect(
       seedBlankCommand(['--db', join(dir, 'bad.db'), '--unit-system', 'furlongs']),
-    ).toThrow(/imperial.*metric/);
+    ).rejects.toThrow(/imperial.*metric/);
   });
 
-  it('puts the database under the repo data directory unless told otherwise', () => {
+  it('puts the database under the repo data directory unless told otherwise', async () => {
     const previous = process.env['SHOPQUOTE_DB_PATH'];
     const previousDir = process.env['SHOPQUOTE_DATA_DIR'];
     try {

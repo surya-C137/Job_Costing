@@ -234,7 +234,7 @@ The workbook's tumble line carried a bespoke formula (`min(0.004 × area + 0.6, 
 
 **CSV parts list** — as in prototype; response returns the created part lines with per-row notes.
 
-**Config JSON** — full export/import; schema versioned (`schemaVersion: 1`).
+**Config JSON** — full export/import; schema versioned (`schemaVersion: 1`). The file is `{ format: "shopquote.config", schemaVersion: 1, exportedAt, config: ShopConfig, priceHistory: [...] }`: the config as of `exportedAt`, plus every material price version (§7) so history survives the trip. Users, customers and quotes are not in it. Import makes the shop's catalog equal the file, matching rows by id (new ids insert, missing rows archive, nothing is deleted), and `?dryRun=true` reports the changes without making them. A file whose config prices disagree with its history is refused; a hand-written file may omit `exportedAt` and `priceHistory`, and its prices then take effect at import.
 
 ---
 
